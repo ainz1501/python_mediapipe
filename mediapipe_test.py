@@ -2,6 +2,7 @@ import cv2
 import mediapipe as mp
 import math
 from PIL import Image
+# change point
 
 # Mediapipeの初期化
 mp_hands = mp.solutions.hands
