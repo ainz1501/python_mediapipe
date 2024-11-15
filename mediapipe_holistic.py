@@ -8,23 +8,40 @@ mp_drawing = mp.solutions.drawing_utils
 # 画像を読み込む
 image_path = '/Users/tokudataichi/Documents/python_mediapipe/IMG_4997.JPG'
 image = cv2.imread(image_path)
+image2_path = '/Users/tokudataichi/Documents/python_mediapipe/IMG_4998.JPG'
+image2 = cv2.imread(image2_path)
 
 # BGRをRGBに変換（MediaPipeがRGBを期待するため）
 image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+image2_rgb = cv2.cvtColor(image2, cv2.COLOR_BGR2RGB)
 
 # Holisticモジュールを使って画像を処理
 with mp_holistic.Holistic(static_image_mode=True) as holistic:
     results = holistic.process(image_rgb)
+    results2 = holistic.process(image2_rgb)
 
     # 結果の可視化
-    if results.pose_landmarks:
-        mp_drawing.draw_landmarks(image, results.pose_landmarks, mp_holistic.POSE_CONNECTIONS, mp_drawing.DrawingSpec(color=(0,0,255)), mp_drawing.DrawingSpec(color=(0,0,0)))
-    if results.left_hand_landmarks:
-        mp_drawing.draw_landmarks(image, results.left_hand_landmarks, mp_holistic.HAND_CONNECTIONS, mp_drawing.DrawingSpec(color=(0,0,255)), mp_drawing.DrawingSpec(color=(0,0,0)))
-    if results.right_hand_landmarks:
-        mp_drawing.draw_landmarks(image, results.right_hand_landmarks, mp_holistic.HAND_CONNECTIONS, mp_drawing.DrawingSpec(color=(0,0,255)), mp_drawing.DrawingSpec(color=(0,0,0)))
+    if results.pose_landmarks and results2.pose_landmarks:
+        mp_drawing.draw_landmarks(image, results.pose_landmarks, mp_holistic.POSE_CONNECTIONS, 
+                                  mp_drawing.DrawingSpec(color=(0,0,255)), mp_drawing.DrawingSpec(color=(0,0,0)))
+        mp_drawing.draw_landmarks(image2, results2.pose_landmarks, mp_holistic.POSE_CONNECTIONS, 
+                                  mp_drawing.DrawingSpec(color=(0,0,255)), mp_drawing.DrawingSpec(color=(0,0,0)))
+              
+    if results.left_hand_landmarks and results2.left_hand_landmarks:
+        mp_drawing.draw_landmarks(image, results.left_hand_landmarks, mp_holistic.HAND_CONNECTIONS, 
+                                  mp_drawing.DrawingSpec(color=(0,0,255)), mp_drawing.DrawingSpec(color=(0,0,0)))
+        mp_drawing.draw_landmarks(image2, results2.left_hand_landmarks, mp_holistic.HAND_CONNECTIONS, 
+                                  mp_drawing.DrawingSpec(color=(0,0,255)), mp_drawing.DrawingSpec(color=(0,0,0)))
+
+    if results.right_hand_landmarks and results2.right_hand_landmarks:
+        mp_drawing.draw_landmarks(image, results.right_hand_landmarks, mp_holistic.HAND_CONNECTIONS, 
+                                  mp_drawing.DrawingSpec(color=(0,0,255)), mp_drawing.DrawingSpec(color=(0,0,0)))
+        mp_drawing.draw_landmarks(image2, results2.right_hand_landmarks, mp_holistic.HAND_CONNECTIONS, 
+                                  mp_drawing.DrawingSpec(color=(0,0,255)), mp_drawing.DrawingSpec(color=(0,0,0)))        
+        
 
 # 処理結果を表示
 cv2.imshow('Holistic Result', image)
+cv2.imshow('Holistic Result 2', image2)
 cv2.waitKey(0)
 cv2.destroyAllWindows()
