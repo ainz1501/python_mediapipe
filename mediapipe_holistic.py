@@ -1,9 +1,15 @@
 import cv2
 import mediapipe as mp
+import matplotlib.pyplot as plt
+import numpy as np
 
 # MediaPipe Holisticモジュールを初期化
 mp_holistic = mp.solutions.holistic
 mp_drawing = mp.solutions.drawing_utils
+mp_pose = mp.solutions.pose
+
+# 骨格情報
+POSE_CONNECTIONS = mp_pose.POSE_CONNECTIONS
 
 # 画像を読み込む サイズは4284 × 5712
 image_path = '/Users/tokudataichi/Documents/python_mediapipe/left0_image.JPG'
@@ -19,24 +25,48 @@ image2_rgb = cv2.cvtColor(image2, cv2.COLOR_BGR2RGB)
 class cam_landmark:
     x:float
     y:float
-    z:float = 0.0
 
     def __init__(self, input_x, input_y) -> None:
         self.x = input_x
         self.y = input_y
 
 # 平行ステレオビジョン
-# def stereo_vision_easy(result, result2):
-#     # holistic_3d_landmarks =[46][3]
-#     pose_3d_landmarks = [33]
-#     right_hand_3d = [21]
-#     left_hand_3d = [21]
-#     baseline = 0.5
+def stereo_vision_easy(pose1, pose2, left1, left2, right1, right2):
+    # holistic_3d_landmarks =[46][3]
+    pose_3d_landmarks = []
+    right_hand_3d = []
+    left_hand_3d = []
+    baseline = 500.0 # 単位は[mm]
+    forcus = 26.0 # 単位は[mm]
+    pixel_pitch = 0.0002 #　単位は[mm]
 
-#     result_camera = transform2camera(result)
-#     result2_camera = transform2camera(result2)
+    if pose1 and pose2:
+        for p1, p2 in zip(pose1, pose2):
+            joint_x = (baseline*p1.x)/(p1.x-p2.x)
+            joint_y = (baseline*p1.y)/(p1.x-p2.x)
+            joint_z = (forcus*p1.x)/(pixel_pitch*(p1.x-p2.x))
 
-#     if result.pose_landmarks and result2.pose_landmarks:
+            print(f"x:{joint_x}, y:{joint_y}, z:{joint_z}")
+            pose_3d_landmarks.append([joint_x, joint_y, joint_z])
+        pose_3d_landmarks = np.array(pose_3d_landmarks)
+    
+    fig = plt.figure(figsize = (8, 8))
+    ax= fig.add_subplot(111, projection='3d')
+    ax.scatter(pose_3d_landmarks[:, 0], pose_3d_landmarks[:,1],pose_3d_landmarks[:,2], s = 1, c = "blue")
+
+    for connection in POSE_CONNECTIONS:
+        start_joint, end_joint = connection
+        x = [pose_3d_landmarks[start_joint, 0], pose_3d_landmarks[end_joint, 0]]
+        y = [pose_3d_landmarks[start_joint, 1], pose_3d_landmarks[end_joint, 1]]
+        z = [pose_3d_landmarks[start_joint, 2], pose_3d_landmarks[end_joint, 2]]
+        plt.plot(x, y, z, c='red', linewidth=1)
+    
+    ax.set_xlabel("X")
+    ax.set_ylabel("Y")
+    ax.set_zlabel("Z")
+    plt.title("3D Skeleton Visualization")
+    plt.legend()
+    plt.show()
 
 # カメラ座標への変換（同一デバイス使用前提）
 def transform2camera(result, width, height):
@@ -57,20 +87,20 @@ def transform_result(results, image):
 
     if results.pose_landmarks:
         pose_cam_landmarks = transform2camera(results.pose_landmarks, width, height)
-        for index, cam_landmarks in enumerate(pose_cam_landmarks):
-            print(f"pose_cam_landmarks[{index}].x : {cam_landmarks.x}")
+        # for index, cam_landmarks in enumerate(pose_cam_landmarks):
+        #     print(f"pose_cam_landmarks[{index}].x : {cam_landmarks.x}")
     else:
         pose_cam_landmarks = None
     if results.left_hand_landmarks:
         left_hand_cam_landmarks = transform2camera(results.left_hand_landmarks, width, height)
-        for index, cam_landmarks in enumerate(left_hand_cam_landmarks):
-            print(f"left_hand_cam_landmarks[{index}].x : {cam_landmarks.x}")
+        # for index, cam_landmarks in enumerate(left_hand_cam_landmarks):
+        #     print(f"left_hand_cam_landmarks[{index}].x : {cam_landmarks.x}")
     else:
         left_hand_cam_landmarks = None
     if results.right_hand_landmarks:
         right_hand_cam_landmarks = transform2camera(results.right_hand_landmarks, width, height)
-        for index, cam_landmarks in enumerate(right_hand_cam_landmarks):
-            print(f"right_hand_cam_landmarks[{index}].x : {cam_landmarks.x}")
+        # for index, cam_landmarks in enumerate(right_hand_cam_landmarks):
+        #     print(f"right_hand_cam_landmarks[{index}].x : {cam_landmarks.x}")
     else:
         right_hand_cam_landmarks = None
     
@@ -110,7 +140,8 @@ with mp_holistic.Holistic(static_image_mode=True) as holistic:
     
     # 出力したキーポイントをカメラ座標系に変換(x,yの値のみ)
     pose_cam, left_hand_cam, right_hand_cam = transform_result(results, image) 
-    pose_cam2, left_hand_cam2, right_hand_cam2 = transform_result(results2, image2)     
+    pose_cam2, left_hand_cam2, right_hand_cam2 = transform_result(results2, image2)
+    stereo_vision_easy(pose_cam, pose_cam2, right_hand_cam, right_hand_cam2, left_hand_cam, left_hand_cam2)     
         
 
 # 処理結果を表示
