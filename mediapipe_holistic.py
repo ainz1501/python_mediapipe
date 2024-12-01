@@ -11,6 +11,10 @@ mp_pose = mp.solutions.pose
 # 骨格情報
 POSE_CONNECTIONS = mp_pose.POSE_CONNECTIONS
 
+# レンダリング情報
+joint_style = mp_drawing.DrawingSpec(color=(0,0,255), thickness=30, circle_radius=10)
+bone_style = mp_drawing.DrawingSpec(color=(200,200,0), thickness=15)
+
 # 画像を読み込む サイズは4284 × 5712
 image_path = '/Users/tokudataichi/Documents/python_mediapipe/left0_image.JPG'
 image = cv2.imread(image_path)
@@ -64,6 +68,7 @@ def stereo_vision_easy(pose1, pose2, left1, left2, right1, right2):
     ax.set_xlabel("X")
     ax.set_ylabel("Y")
     ax.set_zlabel("Z")
+    plt.autoscale(None, )
     plt.title("3D Skeleton Visualization")
     plt.legend()
     plt.show()
@@ -115,28 +120,28 @@ with mp_holistic.Holistic(static_image_mode=True) as holistic:
     if results.pose_landmarks: # 画像１のレンダリング
         print("pose through")
         mp_drawing.draw_landmarks(image, results.pose_landmarks, mp_holistic.POSE_CONNECTIONS, 
-                                  mp_drawing.DrawingSpec(color=(0,0,255)), mp_drawing.DrawingSpec(color=(0,0,0))) 
+                                  joint_style, bone_style) 
     if results.left_hand_landmarks:
         print("left hand through")
         mp_drawing.draw_landmarks(image, results.left_hand_landmarks, mp_holistic.HAND_CONNECTIONS, 
-                                  mp_drawing.DrawingSpec(color=(0,0,255)), mp_drawing.DrawingSpec(color=(0,0,0)))
+                                  joint_style, bone_style)
     if results.right_hand_landmarks:
         print("right hand through")
         mp_drawing.draw_landmarks(image, results.right_hand_landmarks, mp_holistic.HAND_CONNECTIONS, 
-                                  mp_drawing.DrawingSpec(color=(0,0,255)), mp_drawing.DrawingSpec(color=(0,0,0)))
+                                  joint_style, bone_style)
     
     if results2.pose_landmarks: # 画像２のレンダリング
         print("pose 2 through")
         mp_drawing.draw_landmarks(image2, results2.pose_landmarks, mp_holistic.POSE_CONNECTIONS, 
-                                  mp_drawing.DrawingSpec(color=(0,0,255)), mp_drawing.DrawingSpec(color=(0,0,0)))  
+                                  joint_style, bone_style)  
     if results2.left_hand_landmarks: 
         print("left hand 2 through")
         mp_drawing.draw_landmarks(image2, results2.left_hand_landmarks, mp_holistic.HAND_CONNECTIONS, 
-                                  mp_drawing.DrawingSpec(color=(0,0,255)), mp_drawing.DrawingSpec(color=(0,0,0)))
+                                  joint_style, bone_style)
     if results2.right_hand_landmarks:
         print("right hand 2 through")
         mp_drawing.draw_landmarks(image2, results2.right_hand_landmarks, mp_holistic.HAND_CONNECTIONS, 
-                                  mp_drawing.DrawingSpec(color=(0,0,255)), mp_drawing.DrawingSpec(color=(0,0,0)))  
+                                  joint_style, bone_style)  
     
     # 出力したキーポイントをカメラ座標系に変換(x,yの値のみ)
     pose_cam, left_hand_cam, right_hand_cam = transform_result(results, image) 
