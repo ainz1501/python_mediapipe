@@ -2,6 +2,7 @@ import cv2
 import mediapipe as mp
 import matplotlib.pyplot as plt
 import numpy as np
+from datetime import datetime 
 
 # MediaPipe Holisticモジュールを初期化
 mp_holistic = mp.solutions.holistic
@@ -36,7 +37,7 @@ class cam_landmark:
 
 # 平行ステレオビジョン
 def stereo_vision_easy(pose1, pose2, left1, left2, right1, right2):
-    # holistic_3d_landmarks =[46][3]
+    stereo_Stime = datetime.now()
     pose_3d_landmarks = []
     right_hand_3d = []
     left_hand_3d = []
@@ -44,7 +45,8 @@ def stereo_vision_easy(pose1, pose2, left1, left2, right1, right2):
     forcus = 26.0 # 単位は[mm]
     pixel_pitch = 0.0002 #　単位は[mm]
 
-    if pose1 and pose2:
+    # ３Dジョイント位置計算
+    if pose1 and pose2: 
         for p1, p2 in zip(pose1, pose2):
             joint_x = (baseline*p1.x)/(p1.x-p2.x)
             joint_y = (baseline*p1.y)/(p1.x-p2.x)
@@ -54,24 +56,10 @@ def stereo_vision_easy(pose1, pose2, left1, left2, right1, right2):
             pose_3d_landmarks.append([joint_x, joint_y, joint_z])
         pose_3d_landmarks = np.array(pose_3d_landmarks)
     
-    fig = plt.figure(figsize = (8, 8))
-    ax= fig.add_subplot(111, projection='3d')
-    ax.scatter(pose_3d_landmarks[:, 0], pose_3d_landmarks[:,1],pose_3d_landmarks[:,2], s = 1, c = "blue")
+    stereo_Etime = datetime.now()
+    print(f"stereo time:{stereo_Etime - stereo_Stime}")
 
-    for connection in POSE_CONNECTIONS:
-        start_joint, end_joint = connection
-        x = [pose_3d_landmarks[start_joint, 0], pose_3d_landmarks[end_joint, 0]]
-        y = [pose_3d_landmarks[start_joint, 1], pose_3d_landmarks[end_joint, 1]]
-        z = [pose_3d_landmarks[start_joint, 2], pose_3d_landmarks[end_joint, 2]]
-        plt.plot(x, y, z, c='red', linewidth=1)
-    
-    ax.set_xlabel("X")
-    ax.set_ylabel("Y")
-    ax.set_zlabel("Z")
-    plt.autoscale(None, )
-    plt.title("3D Skeleton Visualization")
-    plt.legend()
-    plt.show()
+    return pose_3d_landmarks
 
 # カメラ座標への変換（同一デバイス使用前提）
 def transform2camera(result, width, height):
@@ -113,44 +101,70 @@ def transform_result(results, image):
 
 # Holisticモジュールを使って画像を処理
 with mp_holistic.Holistic(static_image_mode=True) as holistic:
+    all_process_Stime = datetime.now()
+    mediapipe_Stime = datetime.now()
     results = holistic.process(image_rgb)
     results2 = holistic.process(image2_rgb)
-
-    # 結果の可視化
-    if results.pose_landmarks: # 画像１のレンダリング
-        print("pose through")
-        mp_drawing.draw_landmarks(image, results.pose_landmarks, mp_holistic.POSE_CONNECTIONS, 
-                                  joint_style, bone_style) 
-    if results.left_hand_landmarks:
-        print("left hand through")
-        mp_drawing.draw_landmarks(image, results.left_hand_landmarks, mp_holistic.HAND_CONNECTIONS, 
-                                  joint_style, bone_style)
-    if results.right_hand_landmarks:
-        print("right hand through")
-        mp_drawing.draw_landmarks(image, results.right_hand_landmarks, mp_holistic.HAND_CONNECTIONS, 
-                                  joint_style, bone_style)
-    
-    if results2.pose_landmarks: # 画像２のレンダリング
-        print("pose 2 through")
-        mp_drawing.draw_landmarks(image2, results2.pose_landmarks, mp_holistic.POSE_CONNECTIONS, 
-                                  joint_style, bone_style)  
-    if results2.left_hand_landmarks: 
-        print("left hand 2 through")
-        mp_drawing.draw_landmarks(image2, results2.left_hand_landmarks, mp_holistic.HAND_CONNECTIONS, 
-                                  joint_style, bone_style)
-    if results2.right_hand_landmarks:
-        print("right hand 2 through")
-        mp_drawing.draw_landmarks(image2, results2.right_hand_landmarks, mp_holistic.HAND_CONNECTIONS, 
-                                  joint_style, bone_style)  
+    mediapipe_Etime = datetime.now()
+    print(f"mediapipe time:{mediapipe_Etime - mediapipe_Stime}")
     
     # 出力したキーポイントをカメラ座標系に変換(x,yの値のみ)
     pose_cam, left_hand_cam, right_hand_cam = transform_result(results, image) 
     pose_cam2, left_hand_cam2, right_hand_cam2 = transform_result(results2, image2)
-    stereo_vision_easy(pose_cam, pose_cam2, right_hand_cam, right_hand_cam2, left_hand_cam, left_hand_cam2)     
-        
+    pose_3d_landmarks = stereo_vision_easy(pose_cam, pose_cam2, right_hand_cam, right_hand_cam2, left_hand_cam, left_hand_cam2)     
+    all_process_Etime = datetime.now()
+    print(f"all process time:{all_process_Etime - all_process_Stime}")
 
 # 処理結果を表示
+rendering_Stime = datetime.now()
+# ２Dスケルトンレンダリング処理
+if results.pose_landmarks: # 画像１のレンダリング
+    print("pose through")
+    mp_drawing.draw_landmarks(image, results.pose_landmarks, mp_holistic.POSE_CONNECTIONS, 
+                                joint_style, bone_style) 
+if results.left_hand_landmarks:
+    print("left hand through")
+    mp_drawing.draw_landmarks(image, results.left_hand_landmarks, mp_holistic.HAND_CONNECTIONS, 
+                                joint_style, bone_style)
+if results.right_hand_landmarks:
+    print("right hand through")
+    mp_drawing.draw_landmarks(image, results.right_hand_landmarks, mp_holistic.HAND_CONNECTIONS, 
+                                joint_style, bone_style)
+
+if results2.pose_landmarks: # 画像２のレンダリング
+    print("pose 2 through")
+    mp_drawing.draw_landmarks(image2, results2.pose_landmarks, mp_holistic.POSE_CONNECTIONS, 
+                                joint_style, bone_style)  
+if results2.left_hand_landmarks: 
+    print("left hand 2 through")
+    mp_drawing.draw_landmarks(image2, results2.left_hand_landmarks, mp_holistic.HAND_CONNECTIONS, 
+                                joint_style, bone_style)
+if results2.right_hand_landmarks:
+    print("right hand 2 through")
+    mp_drawing.draw_landmarks(image2, results2.right_hand_landmarks, mp_holistic.HAND_CONNECTIONS, 
+                                joint_style, bone_style)  
 cv2.imshow('Holistic Result', image)
 cv2.imshow('Holistic Result 2', image2)
+
+# 3Dスケルトンプロット生成処理
+fig = plt.figure(figsize = (8, 8))
+ax= fig.add_subplot(111, projection='3d')
+ax.scatter(pose_3d_landmarks[:, 0], pose_3d_landmarks[:,1],pose_3d_landmarks[:,2], s = 1, c = "blue")
+# 骨格情報からボーンを形成
+for connection in POSE_CONNECTIONS:
+    start_joint, end_joint = connection
+    x = [pose_3d_landmarks[start_joint, 0], pose_3d_landmarks[end_joint, 0]]
+    y = [pose_3d_landmarks[start_joint, 1], pose_3d_landmarks[end_joint, 1]]
+    z = [pose_3d_landmarks[start_joint, 2], pose_3d_landmarks[end_joint, 2]]
+    plt.plot(x, y, z, c='red', linewidth=1)
+
+ax.set_xlabel("X")
+ax.set_ylabel("Y")
+ax.set_zlabel("Z")
+plt.autoscale(None)
+plt.title("3D Skeleton Visualization")
+rendering_Etime = datetime.now()
+print(f"rendering time:{rendering_Etime - rendering_Stime}")
+plt.show()
 cv2.waitKey(0)
 cv2.destroyAllWindows()
