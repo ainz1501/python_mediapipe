@@ -17,16 +17,16 @@ joint_style = mp_drawing.DrawingSpec(color=(0,0,255), thickness=30, circle_radiu
 bone_style = mp_drawing.DrawingSpec(color=(200,200,0), thickness=15)
 
 # 画像を読み込む サイズは4284 × 5712
-image_path = '/Users/tokudataichi/Documents/python_mediapipe/left0_image.JPG'
+image_path = '/Users/tokudataichi/Documents/python_mediapipe/input_images/left0_image.JPG'
 image = cv2.imread(image_path)
-image2_path = '/Users/tokudataichi/Documents/python_mediapipe/right50_image.JPG'
+image2_path = '/Users/tokudataichi/Documents/python_mediapipe/input_images/right50_image.JPG'
 image2 = cv2.imread(image2_path)
 
 # BGRをRGBに変換（MediaPipeがRGBを期待するため）
 image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 image2_rgb = cv2.cvtColor(image2, cv2.COLOR_BGR2RGB)
 
-# カメラ座標版キーポイント構造体
+# カメラ座標系キーポイント構造体
 class cam_landmark:
     x:float
     y:float
@@ -36,7 +36,7 @@ class cam_landmark:
         self.y = input_y
 
 # 平行ステレオビジョン
-def stereo_vision_easy(pose1, pose2, left1, left2, right1, right2):
+def stereo_vision_parallel(pose1, pose2, left1, left2, right1, right2):
     stereo_Stime = datetime.now()
     pose_3d_landmarks = []
     right_hand_3d = []
@@ -74,24 +74,35 @@ def transform2camera(result, width, height):
         # print(f"cam_landmarks[{index}].x: {cam_landmarks[index].x}")
 
     return cam_landmarks
+
+def stereo_rectification(cam_landmark):
+    rect_landmark = []
+    return rect_landmark
         
+# キーポイント座標の変換処理まとめ
 def transform_result(results, image):
     height, width, _ = image.shape
 
-    if results.pose_landmarks:
+    if results.pose_landmarks: # ボディランドマーク変換
         pose_cam_landmarks = transform2camera(results.pose_landmarks, width, height)
+        rectification_pose = stereo_rectification(pose_cam_landmarks)
         # for index, cam_landmarks in enumerate(pose_cam_landmarks):
         #     print(f"pose_cam_landmarks[{index}].x : {cam_landmarks.x}")
     else:
         pose_cam_landmarks = None
+        rectification_pose = None
+
+
     if results.left_hand_landmarks:
         left_hand_cam_landmarks = transform2camera(results.left_hand_landmarks, width, height)
+        rectification_left_hand = stereo_rectification(pose_cam_landmarks)
         # for index, cam_landmarks in enumerate(left_hand_cam_landmarks):
         #     print(f"left_hand_cam_landmarks[{index}].x : {cam_landmarks.x}")
     else:
         left_hand_cam_landmarks = None
     if results.right_hand_landmarks:
         right_hand_cam_landmarks = transform2camera(results.right_hand_landmarks, width, height)
+        rectification_right_hand = stereo_rectification(pose_cam_landmarks)
         # for index, cam_landmarks in enumerate(right_hand_cam_landmarks):
         #     print(f"right_hand_cam_landmarks[{index}].x : {cam_landmarks.x}")
     else:
@@ -111,11 +122,12 @@ with mp_holistic.Holistic(static_image_mode=True) as holistic:
     # 出力したキーポイントをカメラ座標系に変換(x,yの値のみ)
     pose_cam, left_hand_cam, right_hand_cam = transform_result(results, image) 
     pose_cam2, left_hand_cam2, right_hand_cam2 = transform_result(results2, image2)
-    pose_3d_landmarks = stereo_vision_easy(pose_cam, pose_cam2, right_hand_cam, right_hand_cam2, left_hand_cam, left_hand_cam2)     
+    pose_3d_landmarks = stereo_vision_parallel(pose_cam, pose_cam2, right_hand_cam, right_hand_cam2, left_hand_cam, left_hand_cam2)     
     all_process_Etime = datetime.now()
     print(f"all process time:{all_process_Etime - all_process_Stime}")
 
-# 処理結果を表示
+
+# レンダリング処理
 rendering_Stime = datetime.now()
 # ２Dスケルトンレンダリング処理
 if results.pose_landmarks: # 画像１のレンダリング
