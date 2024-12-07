@@ -16,7 +16,7 @@ POSE_CONNECTIONS = mp_pose.POSE_CONNECTIONS
 JOINT_STYLE = mp_drawing.DrawingSpec(color=(0,0,255), thickness=30, circle_radius=10)
 BONE_STYLE = mp_drawing.DrawingSpec(color=(200,200,0), thickness=15)
 
-# 画像読み込み サイズは4284 × 5712
+# 画像読み込み サイズは横5712 × 縦4284
 IMG_PATH = '/Users/tokudataichi/Documents/python_mediapipe/input_images/left0_image.JPG'
 image = cv2.imread(IMG_PATH)
 IMG2_PATH = '/Users/tokudataichi/Documents/python_mediapipe/input_images/right50_image.JPG'
@@ -39,7 +39,7 @@ class scr_landmark:
         self.y = input_y
 
 # 平行ステレオビジョン
-def stereo_vision_parallel(pose1, pose2, left1, left2, right1, right2):
+def stereo_vision_parallel(pose1, pose2, width, height):
     stereo_Stime = datetime.now()
     pose_3d_landmarks = []
     right_hand_3d = []
@@ -49,11 +49,13 @@ def stereo_vision_parallel(pose1, pose2, left1, left2, right1, right2):
     pixel_pitch = 0.002 #　単位は[mm]
 
     # ３Dジョイント位置計算
-    if pose1 and pose2: 
+    if pose1.size > 0 and pose2.size > 0: 
         for p1, p2 in zip(pose1, pose2):
-            joint_x = (baseline*p1.x)/(p1.x-p2.x) # 単位は全て[mm]
-            joint_y = (baseline*p1.y)/(p1.x-p2.x)
-            joint_z = (focal_length*baseline)/(pixel_pitch*(p1.x-p2.x))
+            u_l, v_l = p1[0]-width/2, p1[1]-height/2
+            u_r, v_r = p2[0]-width/2, p2[1]-height/2
+            joint_x = (baseline*u_l)/(u_l-u_r) # 単位は全て[mm]
+            joint_y = (baseline*v_l)/(u_l-u_r)
+            joint_z = (focal_length*baseline)/(pixel_pitch*(u_l-u_r))
 
             print(f"x:{joint_x}, y:{joint_y}, z:{joint_z}")
             pose_3d_landmarks.append([joint_x, joint_y, joint_z])
@@ -80,17 +82,23 @@ def estimate_external_params(left, right, K):
     return R, T 
 
 # ３D位置復元
-def triangulate_points(P1, P2, left, right):
-    match_list = []
+def triangulate_points(P_left, P_right, left, right):
+    match_left = []
+    match_right = []
+    match_index = []
 
     for idx, (l, r) in enumerate(zip(left, right)):
         if not(l.size == 0 or r.size == 0): # 対応するキーポイントが左右とも存在する場合に限定
-            match_list.append([idx, l, r])
-    
-    points4D = cv2.triangulatePoints(P1, P2, match_list[:, 1], match_list[:, 2])
+            match_left.append(l)
+            match_right.append(r)
+            match_index.append(idx)
+    match_npleft = np.array(match_left)
+    match_npright = np.array(match_right)
+
+    points4D = cv2.triangulatePoints(P_left, P_right, match_npleft.T, match_npright.T)
     points3D =  points4D[:3] / points4D[3]
-    pointsID = match_list[:, 0]
-    return points3D, pointsID
+    pointsID = np.array(match_index)
+    return points3D.T, pointsID
 
 # ステレオビジョン
 def stereo_vision(pose_left, pose_right, width, height):
@@ -114,7 +122,9 @@ def stereo_vision(pose_left, pose_right, width, height):
 
     # 3次元ジョイントの復元
     pose_3d_coordinate, pose_3d_ID = triangulate_points(P_left, P_right, pose_left, pose_right)
-    pose_3d_landmarks = np.hstack((pose_3d_ID.T, pose_3d_coordinate))
+    # print(f"pose coord[0][0]:{pose_3d_coordinate[0][0]}")
+    # print(f"pose ID[0]:{pose_3d_ID[0]}")
+    pose_3d_landmarks = np.hstack((pose_3d_ID, pose_3d_coordinate))
     stereo_Etime = datetime.now()
     print(f"stereo time:{stereo_Etime - stereo_Stime}")
     return pose_3d_landmarks
@@ -138,28 +148,22 @@ def transform2screen(result, width, height):
 # キーポイント座標の変換処理まとめ
 def transform_result(results, width, height):
 
-    if results.pose_landmarks: # ボディランドマーク変換
+    if results.pose_landmarks: # ボディ
         pose_scr_landmarks = transform2screen(results.pose_landmarks, width, height)
         # rectification_pose = stereo_rectification(pose_scr_landmarks)
-        # for index, scr_landmarks in enumerate(pose_scr_landmarks):
-        #     print(f"pose_scr_landmarks[{index}].x : {scr_landmarks.x}")
+        for index, scr_landmarks in enumerate(pose_scr_landmarks):
+            print(f"pose_scr_landmarks[{index}].x : {scr_landmarks}")
     else:
         pose_scr_landmarks = None
         rectification_pose = None
 
 
-    if results.left_hand_landmarks:
+    if results.left_hand_landmarks: # 右手
         left_hand_scr_landmarks = transform2screen(results.left_hand_landmarks, width, height)
-        # rectification_left_hand = stereo_rectification(pose_scr_landmarks)
-        # for index, scr_landmarks in enumerate(left_hand_scr_landmarks):
-        #     print(f"left_hand_scr_landmarks[{index}].x : {scr_landmarks.x}")
     else:
         left_hand_scr_landmarks = None
-    if results.right_hand_landmarks:
+    if results.right_hand_landmarks: # 左手
         right_hand_scr_landmarks = transform2screen(results.right_hand_landmarks, width, height)
-        # rectification_right_hand = stereo_rectification(pose_scr_landmarks)
-        # for index, scr_landmarks in enumerate(right_hand_scr_landmarks):
-        #     print(f"right_hand_scr_landmarks[{index}].x : {scr_landmarks.x}")
     else:
         right_hand_scr_landmarks = None
     
@@ -181,7 +185,7 @@ with mp_holistic.Holistic(static_image_mode=True) as holistic:
     pose_scr2, left_hand_scr2, right_hand_scr2 = transform_result(results2, WIDTH, HEIGHT)
 
     # 3Dキーポイント復元
-    pose_3d_landmarks = stereo_vision(pose_scr, pose_scr2, WIDTH, HEIGHT) 
+    pose_3d_landmarks = stereo_vision_parallel(pose_scr, pose_scr2, WIDTH, HEIGHT) 
 
     all_process_Etime = datetime.now()
     print(f"all process time:{all_process_Etime - all_process_Stime}")
