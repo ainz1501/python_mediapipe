@@ -29,15 +29,6 @@ HEIGHT, WIDTH, _ = image.shape
 image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 image2_rgb = cv2.cvtColor(image2, cv2.COLOR_BGR2RGB)
 
-# スクリーン座標系キーポイント構造体
-class scr_landmark:
-    x:float
-    y:float
-
-    def __init__(self, input_x, input_y) -> None:
-        self.x = input_x
-        self.y = input_y
-
 # 平行ステレオビジョン
 def stereo_vision_parallel(pose1, pose2, width, height):
     stereo_Stime = datetime.now()
@@ -81,8 +72,59 @@ def estimate_external_params(left, right, K):
 
     return R, T 
 
+def estimate_initial_pose(kp1, kp2, matches, K):
+    """
+    初期画像ペアの対応点からカメラポーズを推定
+
+    Parameters:
+    kp1 (list of cv2.KeyPoint): 初期画像ペアの1枚目の特徴点リスト
+    kp2 (list of cv2.KeyPoint): 初期画像ペアの2枚目の特徴点リスト
+    matches (list of cv2.DMatch): 初期画像ペアの対応点を表すcv2.DMatchオブジェクトのリスト
+    K (numpy.ndarray): 3行3列のカメラパラメータ行列
+
+    Returns:
+    R (numpy.ndarray): 3行3列の回転行列
+    t (numpy.ndarray): 3行1列の並進ベクトル
+    mask_pose (numpy.ndarray): インライアを示すマスク
+    """
+    src_pts = np.float32([kp1[m.queryIdx].pt for m in matches])
+    dst_pts = np.float32([kp2[m.trainIdx].pt for m in matches])
+    # 基本行列
+    E, mask = cv2.findEssentialMat(src_pts, dst_pts, K, cv2.RANSAC)
+
+    # カメラ姿勢の推定
+    _, R, t, mask_pose = cv2.recoverPose(E, src_pts, dst_pts, K, mask=mask)
+    return R, t, mask_pose
+
 # ３D位置復元
-def triangulate_points(P_left, P_right, left, right):
+def triangulate_points(P1, P2, kp1, kp2, matches):
+    """
+    カメラの投影行列を使用して特徴点の3D位置を再構築する
+
+    Parameters:
+    P1 (numpy.ndarray): 1枚目の画像のカメラ投影行列
+    P2 (numpy.ndarray): 2枚目の画像のカメラ投影行列
+    kp1 (list of cv2.KeyPoint): 画像1の特徴点リスト
+    kp2 (list of cv2.KeyPoint): 画像2の特徴点リスト
+    matches (list of cv2.DMatch): 画像間のマッチングされた特徴点のリスト
+    mask (numpy.ndarray): インライアを示すマスク
+
+    Returns:
+    points3D (numpy.ndarray): 再構築された3Dポイントの配列
+    """
+    # マッチングされた特徴点を取得
+    pts1 = np.float32([kp1[m] for m in matches])
+    pts2 = np.float32([kp2[m] for m in matches])
+    
+    # 特徴点の3D位置を再構築
+    points4D = cv2.triangulatePoints(P1, P2, pts1, pts2)
+    
+    # 同次座標を3D座標に変換
+    points3D = points4D[:3] / points4D[3]
+
+    return points3D.T
+
+def triangulate_points_withID(P_left, P_right, left, right):
     match_left = []
     match_right = []
     match_index = []
@@ -102,9 +144,19 @@ def triangulate_points(P_left, P_right, left, right):
 
 # ステレオビジョン
 def stereo_vision(pose_left, pose_right, width, height):
+    # 計測開始
     stereo_Stime = datetime.now()
+
+    # 焦点距離、ピクセルピッチ
     focal_length = 26.0 # 単位は[mm]
     pixel_pitch = 0.002 #　単位は[mm]
+
+    # 対応点が存在するキーポイントの番号
+    match_index = []
+    for idx, (l, r) in enumerate(zip(pose_left, pose_right)):
+        if not(l.size == 0 or r.size == 0): # 対応するキーポイントが左右とも存在する場合に限定
+            match_index.append(idx)
+    print(f"match_indax:{len(match_index)}")
 
     # カメラ内部パラメータ　（仮置き）
     internal_param = np.array([[focal_length/pixel_pitch, 0, width/2],
@@ -115,18 +167,23 @@ def stereo_vision(pose_left, pose_right, width, height):
     R_left = np.eye(3)
     T_left = np.zeros((3, 1))
     P_left = np.dot(internal_param, np.hstack((R_left, T_left)))
+    print(f"Pl:{P_left}")
 
     # 右カメラの外部パラメータと投影行列
     R_right, T_right = estimate_external_params(pose_left, pose_right, internal_param)
-    P_right = np.dot(internal_param, np.hstack((R_right, T_right)))
+    P_right = np.hstack((internal_param @ R_right, internal_param @ T_right))
+    print(f"Pr:{P_right}")
 
     # 3次元ジョイントの復元
-    pose_3d_coordinate, pose_3d_ID = triangulate_points(P_left, P_right, pose_left, pose_right)
+    pose_3d_coordinate, pose_3d_ID = triangulate_points(P_left, P_right, pose_left, pose_right, match_index)
     # print(f"pose coord[0][0]:{pose_3d_coordinate[0][0]}")
     # print(f"pose ID[0]:{pose_3d_ID[0]}")
     pose_3d_landmarks = np.hstack((pose_3d_ID, pose_3d_coordinate))
+
+    # 計測終了
     stereo_Etime = datetime.now()
     print(f"stereo time:{stereo_Etime - stereo_Stime}")
+
     return pose_3d_landmarks
 
 # スクリーン座標への変換（同一デバイス使用前提）
@@ -136,9 +193,8 @@ def transform2screen(result, width, height):
         # キーポイントの値をカメラ座標系（画像中央が原点）に変換
         scr_x = landmark.x * width
         scr_y = landmark.y * height
-        # scr_landmarkのインスタンスの生成と同時に、x座標、y座標の値を入力
+        # リストに挿入
         scr_list.append([scr_x, scr_y]) 
-        # print(f"scr_landmarks[{index}].x: {scr_landmarks[index].x}")
     
     scr_landmarks = np.array(scr_list)
 
@@ -185,7 +241,7 @@ with mp_holistic.Holistic(static_image_mode=True) as holistic:
     pose_scr2, left_hand_scr2, right_hand_scr2 = transform_result(results2, WIDTH, HEIGHT)
 
     # 3Dキーポイント復元
-    pose_3d_landmarks = stereo_vision_parallel(pose_scr, pose_scr2, WIDTH, HEIGHT) 
+    pose_3d_landmarks = stereo_vision(pose_scr, pose_scr2, WIDTH, HEIGHT) 
 
     all_process_Etime = datetime.now()
     print(f"all process time:{all_process_Etime - all_process_Stime}")
