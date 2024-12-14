@@ -9,13 +9,13 @@ mp_holistic = mp.solutions.holistic
 mp_drawing = mp.solutions.drawing_utils
 mp_pose = mp.solutions.pose
 
-# 骨格情報
-POSE_CONNECTIONS = mp_pose.POSE_CONNECTIONS
-
-# レンダリング情報
-JOINT_STYLE = mp_drawing.DrawingSpec(color=(0,0,255), thickness=30, circle_radius=10)
-BONE_STYLE = mp_drawing.DrawingSpec(color=(200,200,0), thickness=15)
-
+"""
+入力、グローバル変数
+IMG_PATH, IMG2_PATH : 左右の画像パス
+image, image2       : 左右画像
+HEIGHT, WIDTH       : 画像の高さ、幅（左右同じカメラ、デバイスを使用しているため）
+K                   : カメラパラメータ（左右同じカメラ、デバイスを使用しているため）
+"""
 # 画像読み込み サイズは横5712 × 縦4284
 IMG_PATH = '/Users/tokudataichi/Documents/python_mediapipe/input_images/60left.jpg'
 image = cv2.imread(IMG_PATH)
@@ -29,6 +29,14 @@ HEIGHT, WIDTH, _ = image.shape
 image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 image2_rgb = cv2.cvtColor(image2, cv2.COLOR_BGR2RGB)
 
+"""
+関数概要
+keypoint_detect(左画像, 右画像)  -> 左全身キーポイント, 右全身キーポイント
+transform_screen_coord(左全身キーポイント, 右全身キーポイント, 画像幅, 画像高さ) -> 左画像座標系キーポイント, 右画像座標系キーポイント, マッチングリスト
+cam_pose_estimation(左画像座標系キーポイント, 右画像座標系キーポイント, カメラパラメータ, マッチングリスト) -> 回転行列, 並進ベクトル（左カメラから右カメラ）
+projection_mat(カメラパラメータ, 回転行列, 並進ベクトル) -> 左投影行列, 右投影行列
+triangulate_3dpoint(左投影行列, 右投影行列, 左画像座標系キーポイント, 右画像座標系キーポイント, マッチングリスト) -> 3次元ランドマーク
+"""
 # 平行ステレオビジョン
 def stereo_vision_parallel(pose1, pose2, width, height):
     stereo_Stime = datetime.now()
@@ -225,23 +233,6 @@ def transform_result(results, width, height):
     
     return pose_scr_landmarks, left_hand_scr_landmarks, right_hand_scr_landmarks
 
-def set_equal_aspect(ax):
-    limits = np.array([
-        ax.get_xlim3d(),
-        ax.get_ylim3d(),
-        ax.get_zlim3d(),
-    ])
-    spans = abs(limits[:, 1] - limits[:, 0])
-    centers = np.mean(limits, axis=1)
-    max_span = max(spans)
-    new_limits = np.array([
-        centers - max_span / 2,
-        centers + max_span / 2
-    ]).T
-    ax.set_xlim3d(new_limits[0])
-    ax.set_ylim3d(new_limits[1])
-    ax.set_zlim3d(new_limits[2])
-
 
 # メイン処理
 with mp_holistic.Holistic(static_image_mode=True) as holistic:
@@ -264,6 +255,36 @@ with mp_holistic.Holistic(static_image_mode=True) as holistic:
 
 
 # レンダリング処理
+"""
+レンダリング用情報
+POSE_CONNECTIONS    : MediaPipeの全身ランドマークの接続情報（ボーン）
+JOINT_STYLE         : 左右画像に描画するキーポイントの描画情報
+BONE_STYLE          : 左右画像に描画するボーンの描画情報
+"""
+# 骨格情報
+POSE_CONNECTIONS = mp_pose.POSE_CONNECTIONS
+
+# レンダリング情報
+JOINT_STYLE = mp_drawing.DrawingSpec(color=(0,0,255), thickness=30, circle_radius=10)
+BONE_STYLE = mp_drawing.DrawingSpec(color=(200,200,0), thickness=15)
+
+def set_equal_aspect(ax):
+    limits = np.array([
+        ax.get_xlim3d(),
+        ax.get_ylim3d(),
+        ax.get_zlim3d(),
+    ])
+    spans = abs(limits[:, 1] - limits[:, 0])
+    centers = np.mean(limits, axis=1)
+    max_span = max(spans)
+    new_limits = np.array([
+        centers - max_span / 2,
+        centers + max_span / 2
+    ]).T
+    ax.set_xlim3d(new_limits[0])
+    ax.set_ylim3d(new_limits[1])
+    ax.set_zlim3d(new_limits[2])
+
 rendering_Stime = datetime.now()
 # ２Dスケルトンレンダリング処理
 if results.pose_landmarks: # 画像１のレンダリング
