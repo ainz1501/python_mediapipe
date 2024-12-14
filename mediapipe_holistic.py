@@ -17,7 +17,7 @@ JOINT_STYLE = mp_drawing.DrawingSpec(color=(0,0,255), thickness=30, circle_radiu
 BONE_STYLE = mp_drawing.DrawingSpec(color=(200,200,0), thickness=15)
 
 # 画像読み込み サイズは横5712 × 縦4284
-IMG_PATH = '/Users/tokudataichi/Documents/python_mediapipe/input_images/left0_image.JPG'
+IMG_PATH = '/Users/tokudataichi/Documents/python_mediapipe/input_images/60left.jpg'
 image = cv2.imread(IMG_PATH)
 IMG2_PATH = '/Users/tokudataichi/Documents/python_mediapipe/input_images/right50_image.JPG'
 image2 = cv2.imread(IMG2_PATH)
@@ -46,7 +46,7 @@ def stereo_vision_parallel(pose1, pose2, width, height):
             u_r, v_r = p2[0]-width/2, p2[1]-height/2
             joint_x = (baseline*u_l)/(u_l-u_r) # 単位は全て[mm]
             joint_y = (baseline*v_l)/(u_l-u_r)
-            joint_z = (focal_length*baseline)/(pixel_pitch*(u_l-u_r))
+            joint_z = (focal_length*baseline)/(pixel_pitch*(u_l-u_r)) # pixel_pitchのとこがあってないかも？
 
             print(f"x:{joint_x}, y:{joint_y}, z:{joint_z}")
             pose_3d_landmarks.append([joint_x, joint_y, joint_z])
@@ -225,6 +225,22 @@ def transform_result(results, width, height):
     
     return pose_scr_landmarks, left_hand_scr_landmarks, right_hand_scr_landmarks
 
+def set_equal_aspect(ax):
+    limits = np.array([
+        ax.get_xlim3d(),
+        ax.get_ylim3d(),
+        ax.get_zlim3d(),
+    ])
+    spans = abs(limits[:, 1] - limits[:, 0])
+    centers = np.mean(limits, axis=1)
+    max_span = max(spans)
+    new_limits = np.array([
+        centers - max_span / 2,
+        centers + max_span / 2
+    ]).T
+    ax.set_xlim3d(new_limits[0])
+    ax.set_ylim3d(new_limits[1])
+    ax.set_zlim3d(new_limits[2])
 
 
 # メイン処理
@@ -241,7 +257,7 @@ with mp_holistic.Holistic(static_image_mode=True) as holistic:
     pose_scr2, left_hand_scr2, right_hand_scr2 = transform_result(results2, WIDTH, HEIGHT)
 
     # 3Dキーポイント復元
-    pose_3d_landmarks = stereo_vision(pose_scr, pose_scr2, WIDTH, HEIGHT) 
+    pose_3d_landmarks = stereo_vision_parallel(pose_scr, pose_scr2, WIDTH, HEIGHT) 
 
     all_process_Etime = datetime.now()
     print(f"all process time:{all_process_Etime - all_process_Stime}")
@@ -278,10 +294,37 @@ if results2.pose_landmarks: # 画像２のレンダリング
 cv2.imshow('Holistic Result', image)
 cv2.imshow('Holistic Result 2', image2)
 
+# 2Dプロットを表示
+def plot_hand_landmarks(detection_result, connection, width, height):
+    x_coords = []
+    y_coords = []
+    # ランドマークをプロット
+    for landmark in detection_result.landmark:
+        x_coords.append(landmark.x*width)
+        y_coords.append(landmark.y*height)
+        
+    # キーポイントを描画
+    plt.scatter(x_coords, y_coords, color='red')
+
+    # ボーンを描画
+    for start_idx, end_idx in connection:
+        plt.plot([x_coords[start_idx], x_coords[end_idx]],
+                    [y_coords[start_idx], y_coords[end_idx]],
+                    color='blue')
+        
+    plt.gca().invert_yaxis()  # Y座標を反転して画像と一致させる
+    plt.axis('equal')         # アスペクト比を正確にする
+    plt.show()
+
+# 検出結果を2Dプロットで表示
+plot_hand_landmarks(results.pose_landmarks, POSE_CONNECTIONS, WIDTH, HEIGHT)
+plot_hand_landmarks(results2.pose_landmarks, POSE_CONNECTIONS, WIDTH, HEIGHT)
+
 # 3Dスケルトンプロット生成処理
 fig = plt.figure(figsize = (8, 8))
 ax= fig.add_subplot(111, projection='3d')
 ax.scatter(pose_3d_landmarks[:, 0], pose_3d_landmarks[:,1],pose_3d_landmarks[:,2], s = 1, c = "blue")
+set_equal_aspect(ax)
 # 骨格情報からボーンを形成
 for connection in POSE_CONNECTIONS:
     start_joint, end_joint = connection

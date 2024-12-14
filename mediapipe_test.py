@@ -94,20 +94,25 @@ def detect_and_compute_keypoint(images):
         # RGBカラースケールに変換 (mediapipeはRGB画像を入力に期待するため)
         image_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         # 高さ、幅を取得
-        height, width, _ = img.shape
+        height, width, _ = image_rgb.shape
         # holistic起動
         with mp_holistic.Holistic(static_image_mode = True) as holistic:
             result = holistic.process(image_rgb)
-            screen_points = []
-            for index, landmark in enumerate(result.landmark):
+            pose = result.pose_landmarks
+            kp = []
+            for index, landmark in enumerate(pose.landmark):
                 # キーポイントの値をスクリーン座標系に変換
                 scr_x = landmark.x * width
                 scr_y = landmark.y * height
-                # リストに挿入
-                screen_points.append([scr_x, scr_y])
-            kp = cv2.KeyPoint()
+                # cv2.Keypointのインスタンスを作成
+                kp_instance = cv2.KeyPoint()
+                kp_instance.pt = (scr_x, scr_y)
+                kp.append(kp_instance)
+            
             keypoints.append(kp)
     return keypoints
+
+keypoints = detect_and_compute_keypoint(images=load_images(IMG_PATH))
 
 def match_features(descriptors):
     """
