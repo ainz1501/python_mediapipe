@@ -64,3 +64,18 @@ print("回転ベクトル:")
 print(df_r)
 print("並進ベクトル:")
 print(df_t)
+
+for i, fname in enumerate(images):
+  img = cv.imread(fname)
+  h,  w = img.shape[:2]
+  newcameramtx, roi=cv.getOptimalNewCameraMatrix(mtx,dist,(w,h),1,(w,h))
+  print("新カメラ行列: " , "\n", newcameramtx)
+
+  # # 歪補正
+  # dst = cv.undistort(img, mtx, dist, None, newcameramtx)
+
+  # # 画像の切り落とし
+  # x,y,w,h = roi
+  # dst = dst[y:y+h, x:x+w]
+  # cv.imshow(dst)
+
