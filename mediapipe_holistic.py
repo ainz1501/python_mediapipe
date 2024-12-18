@@ -13,29 +13,159 @@ mp_pose = mp.solutions.pose
 入力、グローバル変数
 IMG_PATH, IMG2_PATH : 左右の画像パス
 image, image2       : 左右画像
-HEIGHT, WIDTH       : 画像の高さ、幅（左右同じカメラ、デバイスを使用しているため）
-K                   : カメラパラメータ（左右同じカメラ、デバイスを使用しているため）
+HEIGHT, WIDTH       : 画像の高さ、幅（左右同じカメラ、デバイスを使用しているため１つずつ）
+K                   : カメラパラメータ（左右同じカメラ、デバイスを使用しているため１つのみ）. 単位は[px]
 """
 # 画像読み込み サイズは横5712 × 縦4284
 IMG_PATH = '/Users/tokudataichi/Documents/python_mediapipe/input_images/60left.jpg'
-image = cv2.imread(IMG_PATH)
 IMG2_PATH = '/Users/tokudataichi/Documents/python_mediapipe/input_images/right50_image.JPG'
+image = cv2.imread(IMG_PATH)
 image2 = cv2.imread(IMG2_PATH)
 
 # 高さ、幅（同じカメラを用いるため片方の画像から取得）
 HEIGHT, WIDTH, _ = image.shape
 
-# BGRをRGBに変換（MediaPipeがRGBを期待するため）
-image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-image2_rgb = cv2.cvtColor(image2, cv2.COLOR_BGR2RGB)
+K = np.array([[4437.04178, 0, 2165.73130], [0, 4515.94693, 2783.42064], [0, 0, 1]])  
+
+# # BGRをRGBに変換（MediaPipeがRGBを期待するため）
+# image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+# image2_rgb = cv2.cvtColor(image2, cv2.COLOR_BGR2RGB)
 
 """
 関数概要
-keypoint_detect(左画像, 右画像)  -> 左全身キーポイント, 右全身キーポイント
-transform_screen_coord(左全身キーポイント, 右全身キーポイント, 画像幅, 画像高さ) -> 左画像座標系キーポイント, 右画像座標系キーポイント, マッチングリスト
-cam_pose_estimation(左画像座標系キーポイント, 右画像座標系キーポイント, カメラパラメータ, マッチングリスト) -> 回転行列, 並進ベクトル（左カメラから右カメラ）
-projection_mat(カメラパラメータ, 回転行列, 並進ベクトル) -> 左投影行列, 右投影行列
-triangulate_3dpoint(左投影行列, 右投影行列, 左画像座標系キーポイント, 右画像座標系キーポイント, マッチングリスト) -> 3次元ランドマーク
+Landmark_detect(左画像, 右画像)  -> 左全身キーポイント, 右全身キーポイント, マッチングリスト
+Normalized_screen_coord(左全身キーポイント, 右全身キーポイント, 画像幅, 画像高さ) -> 左画像座標系キーポイント, 右画像座標系キーポイント, マッチングリスト
+Matching_landmarks(左全身キーポイント, 右全身キーポイント) -> マッチングリスト
+Cam_pose_estimate(左画像座標系キーポイント, 右画像座標系キーポイント, カメラパラメータ, マッチングリスト) -> 回転行列, 並進ベクトル（左カメラから右カメラ）, マスク
+Projection_mat_calc(カメラパラメータ, 回転行列, 並進ベクトル) -> 左投影行列, 右投影行列
+Triangulate_3dpoint(左投影行列, 右投影行列, 左画像座標系キーポイント, 右画像座標系キーポイント, マッチングリスト) -> 3次元ランドマーク
+"""
+def Landmark_detect(image_left, image_right):
+    """
+    左右画像のランドマーク
+    """
+    # RGBスケールに変換
+    image_leftRGB = cv2.cvtColor(image_left, cv2.COLOR_BGR2RGB)
+    image_rightRGB = cv2.cvtColor(image_right, cv2.COLOR_BGR2RGB)
+
+    # ランドマーク推定 静止画 => static_image_mode=True 動画 => 
+    with mp_holistic.Holistic(static_image_mode=True) as holistic:
+        result_left = holistic.process(image_leftRGB)
+        result_right = holistic.process(image_rightRGB)
+
+    pose_left = Normalized_to_screen_coord(result_left.pose_landmarks, WIDTH, HEIGHT)
+    pose_right = Normalized_to_screen_coord(result_right.pose_landmarks, WIDTH, HEIGHT)
+    print("left=","\n",pose_left)
+    print("right=","\n",pose_right)
+
+    matchlist = Matching_landmarks(pose_left, pose_right)
+
+    return pose_left, pose_right, matchlist
+
+def Normalized_to_screen_coord(result, width, height):
+    scr_list = [] # カメラ座標を記録する配列を生成
+    for index, landmark in enumerate(result.landmark):
+        # キーポイントの値をカメラ座標系（画像中央が原点）に変換
+        scr_x = landmark.x * width
+        scr_y = landmark.y * height
+        # リストに挿入
+        scr_list.append([scr_x, scr_y]) 
+    
+    scr_landmarks = np.array(scr_list)
+
+    return scr_landmarks
+
+def Matching_landmarks(landmark_left, landmark_right):
+    # 対応点が存在するキーポイントの番号
+    matchlist = []
+    for l, r in zip(landmark_left, landmark_right):
+        if not(l.size == 0 or r.size == 0): # 対応するキーポイントが左右とも存在する場合に限定
+            matchlist.append(1)
+        else:
+            matchlist.append(0)
+    print("match_list:", matchlist)
+
+    return matchlist
+
+def Cam_pose_estimate(landmark_left, landmark_right, matchlist, K):
+    """
+    初期画像ペアの対応点からカメラポーズを推定
+
+    Parameters:
+    kp1 (list of cv2.KeyPoint): 初期画像ペアの1枚目の特徴点リスト
+    kp2 (list of cv2.KeyPoint): 初期画像ペアの2枚目の特徴点リスト
+    matches (list of cv2.DMatch): 初期画像ペアの対応点を表すcv2.DMatchオブジェクトのリスト
+    K (numpy.ndarray): 3行3列のカメラパラメータ行列
+
+    Returns:
+    R (numpy.ndarray): 3行3列の回転行列
+    t (numpy.ndarray): 3行1列の並進ベクトル
+    mask_pose (numpy.ndarray): インライアを示すマスク
+    """
+    src_list = []
+    dst_list = []
+    for idx, match in enumerate(matchlist):
+        if match == 1:
+            src_list.append(landmark_left[idx])
+            dst_list.append(landmark_right[idx])
+    src_pts = np.array(src_list)
+    dst_pts = np.array(dst_list)
+
+    # 基本行列
+    E, mask = cv2.findEssentialMat(src_pts, dst_pts, K, cv2.RANSAC)
+
+    # カメラ姿勢の推定
+    _, R, t, _ = cv2.recoverPose(E, src_pts, dst_pts, K, mask=mask)
+    print("mask:",mask)
+    return R, t
+
+def Projection_mat_calc(K, R, t):
+    # 左投影行列 P_left = K[I|0] = [K|0]
+    Pleft = np.hstack((K, np.zeros((3, 1))))
+    Pright = np.hstack((K @ R, K @ t))
+
+    return Pleft, Pright
+
+def Triangulate_3Dpoint(Pleft, Pright, landmark_left, landmark_right, matchlist):
+    """
+    カメラの投影行列を使用して特徴点の3D位置を再構築する
+
+    Parameters:
+    P1 (numpy.ndarray): 1枚目の画像のカメラ投影行列
+    P2 (numpy.ndarray): 2枚目の画像のカメラ投影行列
+    kp1 (list of cv2.KeyPoint): 画像1の特徴点リスト
+    kp2 (list of cv2.KeyPoint): 画像2の特徴点リスト
+    matches (list of cv2.DMatch): 画像間のマッチングされた特徴点のリスト
+    mask (numpy.ndarray): インライアを示すマスク
+
+    Returns:
+    points3D (numpy.ndarray): 再構築された3Dポイントの配列
+    """
+    # マッチングされた特徴点を取得
+    left_list = []
+    right_list = []
+    for idx, match in enumerate(matchlist):
+        if match == 1:
+            left_list.append(landmark_left[idx])
+            right_list.append(landmark_right[idx])
+    left_pts = np.array(left_list).T
+    right_pts = np.array(right_list).T
+    
+    # 特徴点の3D位置を再構築
+    points4D = cv2.triangulatePoints(Pleft, Pright, left_pts, right_pts)
+    
+    # 同次座標を3D座標に変換
+    points3D = points4D[:3] / points4D[3]
+
+    return points3D.T
+
+pose_left, pose_right, matchlist = Landmark_detect(image_left=image, image_right=image2)
+R, T = Cam_pose_estimate(pose_left, pose_right, matchlist, K)
+Pleft, Pright = Projection_mat_calc(K, R, T)
+landmark3D = Triangulate_3Dpoint(Pleft, Pright, pose_left, pose_right, matchlist)
+print("landmark3D:","\n",landmark3D)
+"""
+前のやつ
 """
 # 平行ステレオビジョン
 def stereo_vision_parallel(pose1, pose2, width, height):
@@ -235,23 +365,23 @@ def transform_result(results, width, height):
 
 
 # メイン処理
-with mp_holistic.Holistic(static_image_mode=True) as holistic:
-    all_process_Stime = datetime.now()
-    mediapipe_Stime = datetime.now()
-    results = holistic.process(image_rgb)
-    results2 = holistic.process(image2_rgb)
-    mediapipe_Etime = datetime.now()
-    print(f"mediapipe time:{mediapipe_Etime - mediapipe_Stime}")
+# with mp_holistic.Holistic(static_image_mode=True) as holistic:
+#     all_process_Stime = datetime.now()
+#     mediapipe_Stime = datetime.now()
+#     results = holistic.process(image_rgb)
+#     results2 = holistic.process(image2_rgb)
+#     mediapipe_Etime = datetime.now()
+#     print(f"mediapipe time:{mediapipe_Etime - mediapipe_Stime}")
     
-    # 出力したキーポイントをカメラ座標系に変換(x,yの値のみ)
-    pose_scr, left_hand_scr, right_hand_scr = transform_result(results, WIDTH, HEIGHT) 
-    pose_scr2, left_hand_scr2, right_hand_scr2 = transform_result(results2, WIDTH, HEIGHT)
+#     # 出力したキーポイントをカメラ座標系に変換(x,yの値のみ)
+#     pose_scr, left_hand_scr, right_hand_scr = transform_result(results, WIDTH, HEIGHT) 
+#     pose_scr2, left_hand_scr2, right_hand_scr2 = transform_result(results2, WIDTH, HEIGHT)
 
-    # 3Dキーポイント復元
-    pose_3d_landmarks = stereo_vision_parallel(pose_scr, pose_scr2, WIDTH, HEIGHT) 
+#     # 3Dキーポイント復元
+#     pose_3d_landmarks = stereo_vision_parallel(pose_scr, pose_scr2, WIDTH, HEIGHT) 
 
-    all_process_Etime = datetime.now()
-    print(f"all process time:{all_process_Etime - all_process_Stime}")
+#     all_process_Etime = datetime.now()
+#     print(f"all process time:{all_process_Etime - all_process_Stime}")
 
 
 # レンダリング処理

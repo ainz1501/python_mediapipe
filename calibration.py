@@ -14,11 +14,17 @@ criteria = (cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_MAX_ITER, 30, 0.001)
 
 cbrow = 7
 cbcol = 10
+cbsize_mm = 23
 
 
-# prepare object points, like (0,0,0), (1,0,0), (2,0,0) ....,(6,5,0)
+# prepare object points, like (0,0,0), (1,0,0), (2,0,0) ....,(7,10,0)
 objp = np.zeros((cbrow * cbcol,3), np.float32)
 objp[:,:2] = np.mgrid[0:cbcol,0:cbrow].T.reshape(-1,2)
+
+# prepare object mm points, like (0,0,0), (20,0,0), (40,0,0) ....,(6*20,5*20,0)
+objp_mm = np.zeros((cbrow * cbcol,3), np.float32)
+objp_mm[:,:2] = np.mgrid[0:cbcol,0:cbrow].T.reshape(-1,2)
+objp_mm[:,:2] *= cbsize_mm
 
 # Arrays to store object points and image points from all the images.
 objpoints = [] # 3d point in real world space
@@ -35,7 +41,7 @@ for fname in images:
 
     # If found, add object points, image points (after refining them)
     if ret == True:
-      objpoints.append(objp)
+      objpoints.append(objp_mm)
       corners2 = cv.cornerSubPix(gray,corners,(11,11),(-1,-1),criteria)
       imgpoints.append(corners2)
 
@@ -71,11 +77,12 @@ for i, fname in enumerate(images):
   newcameramtx, roi=cv.getOptimalNewCameraMatrix(mtx,dist,(w,h),1,(w,h))
   print("新カメラ行列: " , "\n", newcameramtx)
 
-  # # 歪補正
-  # dst = cv.undistort(img, mtx, dist, None, newcameramtx)
+  # 歪補正
+  dst = cv.undistort(img, mtx, dist, None, newcameramtx)
 
-  # # 画像の切り落とし
-  # x,y,w,h = roi
-  # dst = dst[y:y+h, x:x+w]
-  # cv.imshow(dst)
+  # 画像の切り落とし
+  x,y,w,h = roi
+  dst = dst[y:y+h, x:x+w]
+  cv.imshow("dst", dst)
+  cv.waitKey(0)
 
