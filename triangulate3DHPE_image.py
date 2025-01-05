@@ -16,8 +16,8 @@ mp_pose = mp.solutions.pose
 main_input_outline = 0
 """
 入力、グローバル変数
-IMG_PATH, IMG2_PATH : 左右の画像パス
-image, image2       : 左右画像
+IMGLEFT_PATH, IMGRIGHT_PATH : 左右の画像パス
+image_left, image_right       : 左右画像
 HEIGHT, WIDTH       : 画像の高さ、幅（左右同じカメラ、デバイスを使用しているため１つずつ）
 K                   : カメラパラメータ（左右同じカメラ、デバイスを使用しているため１つのみ）. 単位は[px]
 """
@@ -47,16 +47,7 @@ POSE_CONNECTIONS = mp_pose.POSE_CONNECTIONS
 JOINT_STYLE = mp_drawing.DrawingSpec(color=(0,0,255), thickness=30, circle_radius=10)
 BONE_STYLE = mp_drawing.DrawingSpec(color=(200,200,0), thickness=15)
 
-function_outline = 0
-"""
-関数概要
-Landmark_detect(左画像, 右画像)  -> 左画像座標系キーポイント, 右画像座標系キーポイント, マッチングリスト
-    ・Normalized_screen_coord(左全身キーポイント, 右全身キーポイント, 画像幅, 画像高さ) -> 左画像座標系キーポイント, 右画像座標系キーポイント, マッチングリスト
-    ・Matching_landmarks(左全身キーポイント, 右全身キーポイント) -> マッチングリスト
-Cam_pose_estimate(左画像座標系キーポイント, 右画像座標系キーポイント, カメラパラメータ, マッチングリスト) -> 回転行列, 並進ベクトル（左カメラから右カメラ）, マスク
-Projection_mat_calc(カメラパラメータ, 回転行列, 並進ベクトル) -> 左投影行列, 右投影行列
-Triangulate_3dpoint(左投影行列, 右投影行列, 左画像座標系キーポイント, 右画像座標系キーポイント, マッチングリスト) -> 3次元ランドマーク
-"""
+# 処理関数
 def Landmark_detect(image_left, image_right):
     """
     左右画像のランドマークを推定し、画像座標系のそれぞれのランドマークとマッチングリストを返す
@@ -70,7 +61,7 @@ def Landmark_detect(image_left, image_right):
     pose_right (numpy.ndarray): 33行2列の右画像の全身の画像座標系ランドマーク
     matchlist (list): 左右で規定値以上の信頼度をもつ対応するランドマークが存在することを示すマッチングリスト
     """
-    # RGBスケールに変換
+    # BGRスケールからRGBスケールに変換
     image_leftRGB = cv2.cvtColor(image_left, cv2.COLOR_BGR2RGB)
     image_rightRGB = cv2.cvtColor(image_right, cv2.COLOR_BGR2RGB)
 
@@ -186,8 +177,8 @@ def Cam_pose_Preset(option):
     option: 以下の定数名を入力することで目的に応じた値を返す
 
     Returns:
-    R: 3×3の回転行列
-    t: 3×1の並進ベクトル
+    R: 3行3列の回転行列
+    t: 3行1列の並進ベクトル
     """
     if option == ANGLE60_BASE1500: # 撮影角度60° ベースライン1500mm
         R = np.array([[0.5, 0, -(np.sqrt(3))/2.0],
@@ -256,12 +247,6 @@ def Triangulate_3Dpoint(Pleft, Pright, landmark_left, landmark_right, matchlist)
     return landmark3D
 
 # 結果表示用関数
-rendering_function_outline = 0
-"""
-レンダリング用関数概要
-plot_2Dskeleton(画像座標系ランドマーク, ボーン情報)
-plot_3Dskeleton(3次元ランドマーク, ボーン情報, )
-"""
 def annotation_image(image, landmarks, connections, jointstyle, bonestyle):
     """
     annotation_image(画像, ランドマーク, ボーン情報, ジョイントスタイル, ボーンスタイル)
