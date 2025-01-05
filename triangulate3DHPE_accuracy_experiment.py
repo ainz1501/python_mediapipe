@@ -302,7 +302,7 @@ def set_equal_aspect(ax):
      # ボックスアスペクト比を均等に設定 (バージョン 3.4+)
     ax.set_box_aspect([1, 1, 1])  # x, y, z を同じスケールに
 
-def connection_images():
+def concatenation_images():
     idx = 1
     while True:
         non_annotation_image = cv2.imread("/Users/tokudataichi/Documents/python_mediapipe/output_images/hd00_"+str(idx)+".png")
@@ -312,8 +312,8 @@ def connection_images():
             break
 
         plot3d_image_resize = cv2.resize(plot3d_image, (HEIGHT, HEIGHT), interpolation=cv2.INTER_CUBIC)
-        connect_image = cv2.hconcat([non_annotation_image, annotation_image, plot3d_image_resize])
-        cv2.imshow("connect_image", connect_image)
+        concatenation_image = cv2.hconcat([non_annotation_image, annotation_image, plot3d_image_resize])
+        cv2.imshow("concatenation_image", concatenation_image)
         cv2.imwrite("/Users/tokudataichi/Documents/python_mediapipe/output_images/hdvideo_frames_00&01/frame_"+str(idx).zfill(4)+".jpg", connect_image)
         idx += 1
 
@@ -354,7 +354,7 @@ print("landmark3D:","\n",landmark3D)
 plot_3Dskeleton(landmark3D, POSE_CONNECTIONS, matchlist, frame_num)
 
 # 保存した画像を連結
-connection_images()
+concatenation_images()
 
 cv2.waitKey(0)
 cv2.destroyAllWindows() 
