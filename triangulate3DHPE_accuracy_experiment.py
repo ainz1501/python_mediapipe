@@ -21,6 +21,8 @@ param1 = parameters["cameras"][479] # HDカメラ00_00
 param2 = parameters["cameras"][480]
 K_left = np.array(param1["K"])
 K_right = np.array(param2["K"])
+VIDEO1 = cv2.VideoCapture("/Users/tokudataichi/Documents/python_mediapipe/panoptic-toolbox/171204_pose1_sample/hdVideos/hd_00_00.mp4")
+VIDEO2 = cv2.VideoCapture("/Users/tokudataichi/Documents/python_mediapipe/panoptic-toolbox/171204_pose1_sample/hdVideos/hd_00_01.mp4")
 
 # レンダリング用入力
 # ボーン情報
@@ -112,7 +114,7 @@ def Matching_landmarks(landmark_left, landmark_right, enable):
     else:
         for i in range(len(landmark_left.landmark)):
             matching_list.append(1)
-    print("match_list:", matching_list)
+    # print("match_list:", matching_list)
 
     return matching_list
 
@@ -216,9 +218,8 @@ def Triangulate_3Dpoint(Pleft, Pright, landmark_left, landmark_right, matchlist)
 # 誤差計算用
 
 # 結果表示用関数
-def annotation_image(image, landmarks, connections, jointstyle, bonestyle):
+def annotation_image(image1, landmarks1, connections, jointstyle, bonestyle):
     """
-    annotation_image(画像, ランドマーク, ボーン情報, ジョイントスタイル, ボーンスタイル)
     mediapipeが推定したランドマークを画像に描画する関数
 
     Parameters:
@@ -228,10 +229,10 @@ def annotation_image(image, landmarks, connections, jointstyle, bonestyle):
     jointstyle (mp_drawing.DrawingSpec)     : ランドマークを示す点の描写情報
     bonestyle (mp_drawing.DrawingSpec)      : ランドマークを繋ぐ線の描写情報
     """
-    mp_drawing.draw_landmarks(image, landmarks, connections, 
+    mp_drawing.draw_landmarks(image1, landmarks1, connections, 
                             jointstyle, bonestyle)
-    cv2.imshow('Holistic Result', image)
-    cv2.waitKey(0)
+    # cv2.imshow('Holistic Result', image)
+    # cv2.waitKey(0)
 
 def plot_2Dskeleton(landmarks, connection):
     x_coords = []
@@ -256,7 +257,7 @@ def plot_2Dskeleton(landmarks, connection):
     plt.axis('equal')         # アスペクト比を正確にする
     plt.show()
 
-def plot_3Dskeleton(landmarks, connections, matchlist):
+def plot_3Dskeleton(landmarks, connections, matchlist, frame_num):
     fig = plt.figure(figsize = (8, 8))
     ax= fig.add_subplot(111, projection='3d')
     ax.scatter(landmarks[:, 0], landmarks[:,1],landmarks[:,2], s = 1, c = "blue")
@@ -276,9 +277,9 @@ def plot_3Dskeleton(landmarks, connections, matchlist):
     ax.set_ylabel("Y")
     ax.set_zlabel("Z")
     plt.title("3D Skeleton Visualization")
-    ax.view_init(elev=0, azim=-5, roll=-90)
-    fig.savefig("/Users/tokudataichi/Documents/python_mediapipe/output_3dplot/"+"test_plot"+".png")
-    plt.show()
+    ax.view_init(elev=180, azim=5, roll=-90)
+    fig.savefig("/Users/tokudataichi/Documents/python_mediapipe/output_3dplot/3dplot_"+str(frame_num)+".png")
+    # plt.show()
 
 # プロットの軸を等間隔にする
 def set_equal_aspect(ax):
@@ -301,14 +302,28 @@ def set_equal_aspect(ax):
      # ボックスアスペクト比を均等に設定 (バージョン 3.4+)
     ax.set_box_aspect([1, 1, 1])  # x, y, z を同じスケールに
 
+def connection_images():
+    idx = 1
+    while True:
+        non_annotation_image = cv2.imread("/Users/tokudataichi/Documents/python_mediapipe/output_images/hd00_"+str(idx)+".png")
+        annotation_image = cv2.imread("/Users/tokudataichi/Documents/python_mediapipe/output_images/hd00_"+str(idx)+"_annotated.png")
+        plot3d_image = cv2.imread("/Users/tokudataichi/Documents/python_mediapipe/output_3dplot/3dplot_"+str(idx)+".png")
+        if (non_annotation_image is None) or (annotation_image is None) or (plot3d_image is None):
+            break
+
+        plot3d_image_resize = cv2.resize(plot3d_image, (HEIGHT, HEIGHT), interpolation=cv2.INTER_CUBIC)
+        connect_image = cv2.hconcat([non_annotation_image, annotation_image, plot3d_image_resize])
+        cv2.imshow("connect_image", connect_image)
+        cv2.imwrite("/Users/tokudataichi/Documents/python_mediapipe/output_images/hdvideo_frames_00&01/frame_"+str(idx).zfill(4)+".jpg", connect_image)
+        idx += 1
+
 """
 -------------------------------------------------------------------------------------------------------
 """
 # メイン処理部
+frame_num = 1
 # while True:
 # ビデオキャプチャー
-VIDEO1 = cv2.VideoCapture("/Users/tokudataichi/Documents/python_mediapipe/panoptic-toolbox/171204_pose1_sample/hdVideos/hd_00_00.mp4")
-VIDEO2 = cv2.VideoCapture("/Users/tokudataichi/Documents/python_mediapipe/panoptic-toolbox/171204_pose1_sample/hdVideos/hd_00_01.mp4")
 ret1, img1 = VIDEO1.read()
 ret2, img2 = VIDEO2.read()
 
@@ -316,8 +331,14 @@ if not (ret1 and ret2):
     sys.exit()
 # 高さ、幅（同じカメラを用いるため片方の画像から取得）
 HEIGHT, WIDTH, _ = img1.shape
+
+# 注釈前の画像を保存する
+cv2.imwrite("/Users/tokudataichi/Documents/python_mediapipe/output_images/hd00_"+str(frame_num)+".png", img1)
+
 # ランドマーク、マッチングリスト
 pose_left, pose_right, matchlist = Landmark_detect(img1, img2, matching_flag=False)
+
+cv2.imwrite("/Users/tokudataichi/Documents/python_mediapipe/output_images/hd00_"+str(frame_num)+"_annotated.png", img1)
 # 回転行列、並進ベクトル
 R_left, T_left = np.array(param1["R"]), np.array(param1["t"])
 R_right, T_right = np.array(param2["R"]), np.array(param2["t"])
@@ -330,7 +351,11 @@ print("landmark3D:","\n",landmark3D)
 # レンダリング処理
 # plot_2Dskeleton(pose_left, POSE_CONNECTIONS)
 # plot_2Dskeleton(pose_right, POSE_CONNECTIONS)
-plot_3Dskeleton(landmark3D, POSE_CONNECTIONS, matchlist)
+plot_3Dskeleton(landmark3D, POSE_CONNECTIONS, matchlist, frame_num)
 
+# 保存した画像を連結
+connection_images()
 
+cv2.waitKey(0)
 cv2.destroyAllWindows() 
+frame_num += 1
