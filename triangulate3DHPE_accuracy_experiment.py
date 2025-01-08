@@ -5,6 +5,7 @@ import numpy as np
 from datetime import datetime 
 import sys
 import json
+import time
 
 # キャリブレーションファイル呼び出し
 calibration_file = open("/Users/tokudataichi/Documents/python_mediapipe/panoptic-toolbox/171204_pose1_sample/calibration_171204_pose1_sample.json")
@@ -302,60 +303,43 @@ def set_equal_aspect(ax):
      # ボックスアスペクト比を均等に設定 (バージョン 3.4+)
     ax.set_box_aspect([1, 1, 1])  # x, y, z を同じスケールに
 
-def concatenation_images():
-    idx = 1
-    while True:
-        non_annotation_image = cv2.imread("/Users/tokudataichi/Documents/python_mediapipe/output_images/hd00_"+str(idx)+".png")
-        annotation_image = cv2.imread("/Users/tokudataichi/Documents/python_mediapipe/output_images/hd00_"+str(idx)+"_annotated.png")
-        plot3d_image = cv2.imread("/Users/tokudataichi/Documents/python_mediapipe/output_3dplot/3dplot_"+str(idx)+".png")
-        if (non_annotation_image is None) or (annotation_image is None) or (plot3d_image is None):
-            break
-
-        plot3d_image_resize = cv2.resize(plot3d_image, (HEIGHT, HEIGHT), interpolation=cv2.INTER_CUBIC)
-        concatenation_image = cv2.hconcat([non_annotation_image, annotation_image, plot3d_image_resize])
-        cv2.imshow("concatenation_image", concatenation_image)
-        cv2.imwrite("/Users/tokudataichi/Documents/python_mediapipe/output_images/hdvideo_frames_00&01/frame_"+str(idx).zfill(4)+".jpg", connect_image)
-        idx += 1
-
 """
 -------------------------------------------------------------------------------------------------------
 """
 # メイン処理部
 frame_num = 1
-# while True:
-# ビデオキャプチャー
-ret1, img1 = VIDEO1.read()
-ret2, img2 = VIDEO2.read()
+while True:
+    # ビデオキャプチャー
+    ret1, img1 = VIDEO1.read()
+    ret2, img2 = VIDEO2.read()
 
-if not (ret1 and ret2):
-    sys.exit()
-# 高さ、幅（同じカメラを用いるため片方の画像から取得）
-HEIGHT, WIDTH, _ = img1.shape
+    if not (ret1 and ret2):
+        print("breaked frame:", frame_num)
+        break
+    # 高さ、幅（同じカメラを用いるため片方の画像から取得）
+    HEIGHT, WIDTH, _ = img1.shape
 
-# 注釈前の画像を保存する
-cv2.imwrite("/Users/tokudataichi/Documents/python_mediapipe/output_images/hd00_"+str(frame_num)+".png", img1)
+    # 注釈前の画像を保存する
+    cv2.imwrite("/Users/tokudataichi/Documents/python_mediapipe/output_images/hd00_"+str(frame_num)+".png", img1)
 
-# ランドマーク、マッチングリスト
-pose_left, pose_right, matchlist = Landmark_detect(img1, img2, matching_flag=False)
+    # ランドマーク、マッチングリスト
+    pose_left, pose_right, matchlist = Landmark_detect(img1, img2, matching_flag=False)
 
-cv2.imwrite("/Users/tokudataichi/Documents/python_mediapipe/output_images/hd00_"+str(frame_num)+"_annotated.png", img1)
-# 回転行列、並進ベクトル
-R_left, T_left = np.array(param1["R"]), np.array(param1["t"])
-R_right, T_right = np.array(param2["R"]), np.array(param2["t"])
-# 投影行列
-Pleft, Pright = Projection_mat_calc(K_left, R_left, T_left, K_right, R_right, T_right)
-# 3次元位置
-landmark3D = Triangulate_3Dpoint(Pleft, Pright, pose_left, pose_right, matchlist)
-print("landmark3D:","\n",landmark3D)
+    cv2.imwrite("/Users/tokudataichi/Documents/python_mediapipe/output_images/hd00_"+str(frame_num)+"_annotated.png", img1)
+    # 回転行列、並進ベクトル
+    R_left, T_left = np.array(param1["R"]), np.array(param1["t"])
+    R_right, T_right = np.array(param2["R"]), np.array(param2["t"])
+    # 投影行列
+    Pleft, Pright = Projection_mat_calc(K_left, R_left, T_left, K_right, R_right, T_right)
+    # 3次元位置
+    landmark3D = Triangulate_3Dpoint(Pleft, Pright, pose_left, pose_right, matchlist)
+    print("landmark3D:","\n",landmark3D)
 
-# レンダリング処理
-# plot_2Dskeleton(pose_left, POSE_CONNECTIONS)
-# plot_2Dskeleton(pose_right, POSE_CONNECTIONS)
-plot_3Dskeleton(landmark3D, POSE_CONNECTIONS, matchlist, frame_num)
+    # レンダリング処理
+    # plot_2Dskeleton(pose_left, POSE_CONNECTIONS)
+    # plot_2Dskeleton(pose_right, POSE_CONNECTIONS)
+    plot_3Dskeleton(landmark3D, POSE_CONNECTIONS, matchlist, frame_num)
 
-# 保存した画像を連結
-concatenation_images()
-
-cv2.waitKey(0)
-cv2.destroyAllWindows() 
-frame_num += 1
+    time.sleep(1)
+    cv2.destroyAllWindows() 
+    frame_num += 1

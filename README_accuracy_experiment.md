@@ -1,3 +1,6 @@
+v0.2
+- make concatenated images video using only 2 video
+
 v0.1
 - Be able to save annotate image and non-annotate image
 - add "concatenation_images" function    
