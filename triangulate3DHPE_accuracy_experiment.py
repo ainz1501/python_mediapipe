@@ -19,11 +19,11 @@ mp_drawing = mp.solutions.drawing_utils
 mp_pose = mp.solutions.pose
 
 # 入力動画
-VIDEO1 = cv2.VideoCapture("./panoptic-toolbox/171204_pose1_sample/hdVideos/hd_00_00.mp4")
-VIDEO2 = cv2.VideoCapture("./panoptic-toolbox/171204_pose1_sample/hdVideos/hd_00_01.mp4")
+VIDEO1 = cv2.VideoCapture("./panoptic-toolbox/171204_pose1_sample/hdVideos/hd_00_24.mp4")
+VIDEO2 = cv2.VideoCapture("./panoptic-toolbox/171204_pose1_sample/hdVideos/hd_00_25.mp4")
 # 内部パラメータ、外部パラメータ
-param1 = parameters["cameras"][479] # HDカメラ00_00
-param2 = parameters["cameras"][480]
+param1 = parameters["cameras"][503] # HDカメラ00_00 [479]
+param2 = parameters["cameras"][504]
 K_left = np.array(param1["K"])
 R_left, T_left = np.array(param1["R"]), np.array(param1["t"])
 K_right = np.array(param2["K"])
@@ -33,7 +33,7 @@ R_right, T_right = np.array(param2["R"]), np.array(param2["t"])
 # レンダリング用入力
 # 一時的に画像を保存するフォルダパス
 TEMPORARY_IMAGES_STORAGE_PATH = "./output_images/images_temporary_storage/"
-FRAMES_STORAGE_PATH = "./output_images/hdvideo_frames_00&01/"
+FRAMES_STORAGE_PATH = "./output_images/hdvideo_frames_24&25/"
 # ボーン情報
 POSE_CONNECTIONS = mp_pose.POSE_CONNECTIONS
 # レンダリング情報
@@ -349,7 +349,7 @@ def concatenate_images(frame_num, storage_path, save_path):
     # 画像を横に連結
     concatenation_left_image = cv2.hconcat([original_images[0], annotated_images[0], plot3d_image_resize])
     concatenation_right_image = cv2.hconcat([original_images[1], annotated_images[1], plot3d_image_resize])
-    # cv2.imshow("concatenation_image", concatenation_image)
+    # cv2.imshow("concatenation_image", concatenation_left_image)
 
     frames_left_name = "frame_left_"+str(frame_num).zfill(4)+".jpg" # 例："frame_left_0001.jpg"
     frames_right_name = "frame_right_"+str(frame_num).zfill(4)+".jpg" # 例："frame_right_0001.jpg"
