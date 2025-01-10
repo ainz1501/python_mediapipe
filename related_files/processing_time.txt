@@ -1,0 +1,13 @@
+entire ave: 0.18704408784175203
+Landmark_detect ave: 0.1869036210091075
+Normalized_to_screen_coord ave: 0.00004853
+Projection_mat_calc ave: 0.00003753
+Triangulate_3Dpoint ave: 0.00005136
+entire culc: 0.18704104716778688
+Landmark_detect left-image ave: 0.1869036210091075
+Landmark_detect right-image ave: 0.1869036210091075
+Landmark_detect per: 99.925 %
+Normalized_to_screen_coord per: 0.026 %
+Projection_mat_calc per: 0.020 %
+Triangulate_3Dpoint per: 0.027 %
+entire fps: 5.3463
