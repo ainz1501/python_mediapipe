@@ -18,6 +18,7 @@ POSE_CONNECTIONS = mp_pose.POSE_CONNECTIONS
 # レンダリング情報
 JOINT_STYLE = mp_drawing.DrawingSpec(color=(0,0,255), thickness=5, circle_radius=3)
 BONE_STYLE = mp_drawing.DrawingSpec(color=(200,200,0), thickness=5)
+mp_drawing._VISIBILITY_THRESHOLD = 0.0 # 画像に表示する際のランドマークの信用度閾値
 
 # 処理関数
 def Landmark_detect(image_left, image_right):
@@ -383,7 +384,7 @@ for video_num in range(START_VIDEO_NUM, START_VIDEO_NUM+1):
     VIDEO1 = cv2.VideoCapture("./panoptic-toolbox/"+DATASET_NAME+"/hdVideos/hd_00_"+str(USE_MAIN_VIDEO_NUM).zfill(2)+".mp4")
     VIDEO2 = cv2.VideoCapture("./panoptic-toolbox/"+DATASET_NAME+"/hdVideos/hd_00_"+str(video_num).zfill(2)+".mp4")
     # 内部パラメータ、外部パラメータ
-    param1 = parameters["cameras"][479] # HDカメラ00_00 [479]
+    param1 = parameters["cameras"][479+USE_MAIN_VIDEO_NUM] # HDカメラ00_00 [479]
     param2 = parameters["cameras"][479+video_num]
     K_left = np.array(param1["K"])
     R_left, T_left = np.array(param1["R"]), np.array(param1["t"])
