@@ -13,6 +13,7 @@ mp_holistic = mp.solutions.holistic
 mp_drawing = mp.solutions.drawing_utils
 mp_pose = mp.solutions.pose
 
+# hd00_2 13枚目 
 # ボーン情報
 POSE_CONNECTIONS = mp_pose.POSE_CONNECTIONS
 # レンダリング情報
