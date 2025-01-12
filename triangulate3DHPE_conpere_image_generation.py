@@ -16,7 +16,7 @@ import os
 
 出力となる比較用画像
 3Dプロット
-
+左右のアノテーション画像
 """
 # MediaPipe Holisticモジュールを初期化
 mp_holistic = mp.solutions.holistic
@@ -328,7 +328,7 @@ def set_equal_aspect(ax):
      # ボックスアスペクト比を均等に設定 (バージョン 3.4+)
     ax.set_box_aspect([1, 1, 1])  # x, y, z を同じスケールに
 
-def concatenate_images(frame_num, storage_path, save_path, show_flag):
+def concatenate_images(frame_num, left_view_num, right_view_num, storage_path, save_path, show_flag):
     # 注釈前・注釈後の画像の読み込み
     original_images = (cv2.imread(storage_path+"original_L.png"), cv2.imread(storage_path+"original_R.png"))
     annotated_images = (cv2.imread(storage_path+"annotated_L.png"), cv2.imread(storage_path+"annotated_R.png"))
@@ -338,19 +338,17 @@ def concatenate_images(frame_num, storage_path, save_path, show_flag):
     plot3d_image = cv2.imread(storage_path+"3dplot.png")
     plot3d_image_resize = cv2.resize(plot3d_image, (HEIGHT, HEIGHT), interpolation=cv2.INTER_CUBIC)
     # 画像を横に連結
-    concatenation_left_image = cv2.hconcat([original_images[0], annotated_images[0], plot3d_image_resize])
-    concatenation_right_image = cv2.hconcat([original_images[1], annotated_images[1], plot3d_image_resize])
+    concatenation_image = cv2.hconcat([annotated_images[0], annotated_images[1], plot3d_image_resize])
     if show_flag:
-        cv2.imshow("concatenation_image", concatenation_left_image)
+        cv2.imshow("concatenation_image", concatenation_image)
 
     # 連結画像を保存
     if save_path is not None:
-        frames_left_name = "frame_left_"+str(frame_num).zfill(4)+".jpg" # 例："frame_left_0001.jpg"
-        frames_right_name = "frame_right_"+str(frame_num).zfill(4)+".jpg" # 例："frame_right_0001.jpg"
-        cv2.imwrite(save_path+frames_left_name, concatenation_left_image)
-        cv2.imwrite(save_path+frames_right_name, concatenation_right_image)
+        using_views = str(left_view_num).zfill(2)+"&"+str(right_view_num).zfill(2)
+        frames_name = "frame_"+str(frame_num).zfill(4)+"_"+using_views+".jpg" # 例："frame_left_0001.jpg"
+        cv2.imwrite(save_path+frames_name, concatenation_image)
 
-    return concatenation_left_image, concatenation_right_image
+    return concatenation_image
 
 def create_video_from_images(concatenation_left, concatenation_right, frame_rate, save_path):
     # 左カメラ各フレームの比較用画像読み込み
@@ -383,6 +381,7 @@ def create_video_from_images(concatenation_left, concatenation_right, frame_rate
 USE_MAIN_VIDEO_NUM = 0
 START_VIDEO_NUM = 1
 FRAME_NUM_LIST = [1400, 6200]
+USE_FRAME_NUM = 0
 # 使用データセット
 DATASET_NAME = "171204_pose3"
 # キャリブレーションファイル呼び出し
@@ -412,58 +411,57 @@ for video_num in range(START_VIDEO_NUM, 31):
     # キャプチャーするフレーム間隔
     capture_rate = 100
 
-    frame_num = 1
+    frame_num = FRAME_NUM_LIST[USE_FRAME_NUM]
     concatnate_left = []
     concatnate_right = []
-    while True:
-        print("frame "+str(frame_num)) # 現在のキャプチャフレーム数を表示
-        
-        # キャプチャー処理
-        for i in range(capture_rate): # capture_rateフレームごとにキャプチャ
-            # ビデオキャプチャー
-            ret1, img1 = VIDEO1.read()
-            ret2, img2 = VIDEO2.read()
-        if not (ret1 and ret2):
-            print("breaked frame:", frame_num)
-            break
-        
-        # 三角測量を用いた3Dポーズ推定(HPE)
-        # 高さ、幅（同じカメラを用いるため片方の画像から取得）
-        HEIGHT, WIDTH, _ = img1.shape   
-        # CMU Panoptic HDカメラ 1920×1080
-        # ランドマーク、マッチングリスト
-        result_left, result_right = Landmark_detect(image_left=img1, image_right=img2)
-        if (result_left.pose_landmarks is None) or (result_right.pose_landmarks is None):
-            if result_left.pose_landmarks is None:
-                cv2.imwrite(VIDEO_STORAGE_PATH+"disable_frame_L_"+str(frame_num)+".png", img1)
-            if result_right.pose_landmarks is None:
-                cv2.imwrite(VIDEO_STORAGE_PATH+"disable_frame_L_"+str(frame_num)+".png", img1)
-            print("no pose")
-        else:
-            # 画像座標系への変換(同時に体のランドマークのみ使用)
-            pose_left, pose_right = Normalized_to_screen_coord(result_left.pose_landmarks, result_right.pose_landmarks, WIDTH, HEIGHT)
-            # print("left=","\n",pose_left)
-            # print("right=","\n",pose_right)
-            # 投影行列を計算
-            Pleft, Pright = Projection_mat_calc(K_left, R_left, T_left, K_right, R_right, T_right)
-            # 3次元位置を復元
-            landmark3D = Triangulate_3Dpoint(Pleft, Pright, pose_left, pose_right)
-            # print("landmark3D:","\n",landmark3D)
+    print("frame "+str(frame_num)) # 使用するフレーム数を表示
+    
+    # キャプチャー処理
+    VIDEO1.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
+    VIDEO2.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
+    ret1, img1 = VIDEO1.read()
+    ret2, img2 = VIDEO2.read()
+    if not (ret1 and ret2):
+        print("breaked frame:", frame_num)
+        break
+    
+    # 三角測量を用いた3Dポーズ推定(HPE)
+    # 高さ、幅（同じカメラを用いるため片方の画像から取得）
+    HEIGHT, WIDTH, _ = img1.shape   
+    # CMU Panoptic HDカメラ 1920×1080
+    # ランドマーク、マッチングリスト
+    result_left, result_right = Landmark_detect(image_left=img1, image_right=img2)
+    if (result_left.pose_landmarks is None) or (result_right.pose_landmarks is None):
+        if result_left.pose_landmarks is None:
+            cv2.imwrite(VIDEO_STORAGE_PATH+"disable_frame_L_"+str(frame_num)+".png", img1)
+        if result_right.pose_landmarks is None:
+            cv2.imwrite(VIDEO_STORAGE_PATH+"disable_frame_L_"+str(frame_num)+".png", img1)
+        print("no pose")
+    else:
+        # 画像座標系への変換(同時に体のランドマークのみ使用)
+        pose_left, pose_right = Normalized_to_screen_coord(result_left.pose_landmarks, result_right.pose_landmarks, WIDTH, HEIGHT)
+        # print("left=","\n",pose_left)
+        # print("right=","\n",pose_right)
+        # 投影行列を計算
+        Pleft, Pright = Projection_mat_calc(K_left, R_left, T_left, K_right, R_right, T_right)
+        # 3次元位置を復元
+        landmark3D = Triangulate_3Dpoint(Pleft, Pright, pose_left, pose_right)
+        # print("landmark3D:","\n",landmark3D)
 
-            # 比較用画像を作成
-            annotate_image(img1, result_left.pose_landmarks, img2, result_right.pose_landmarks, 
-                                                                    POSE_CONNECTIONS, JOINT_STYLE, BONE_STYLE)
-            matching_list = Matching_landmarks(result_left.pose_landmarks, result_right.pose_landmarks, enable=False)
-            fig, ax = plot_3Dskeleton(landmark3D, POSE_CONNECTIONS, matching_list, save_path=TEMPORARY_IMAGES_STORAGE_PATH)
-            # 比較用画像を横に連結する
-            out_left, out_right = concatenate_images(frame_num, storage_path=TEMPORARY_IMAGES_STORAGE_PATH, save_path=None, show_flag=False)
-            concatnate_left.append(out_left)
-            concatnate_right.append(out_right)
-            
-            print("out num ",len(concatnate_left))
-            # cv2.waitKey(0)
-            cv2.destroyAllWindows() 
+        # 比較用画像を作成
+        annotate_image(img1, result_left.pose_landmarks, img2, result_right.pose_landmarks, 
+                                                                POSE_CONNECTIONS, JOINT_STYLE, BONE_STYLE)
+        matching_list = Matching_landmarks(result_left.pose_landmarks, result_right.pose_landmarks, enable=False)
+        fig, ax = plot_3Dskeleton(landmark3D, POSE_CONNECTIONS, matching_list, save_path=TEMPORARY_IMAGES_STORAGE_PATH)
+        # 比較用画像を横に連結する
+        out_left, out_right = concatenate_images(frame_num, storage_path=TEMPORARY_IMAGES_STORAGE_PATH, save_path=None, show_flag=False)
+        concatnate_left.append(out_left)
+        concatnate_right.append(out_right)
+        
+        print("out num ",len(concatnate_left))
+        cv2.waitKey(0)
+        cv2.destroyAllWindows() 
         frame_num += 1
 
     # 比較用動画の作成
-    create_video_from_images(concatnate_left, concatnate_right, frame_rate=5, save_path=VIDEO_STORAGE_PATH)
+    # create_video_from_images(concatnate_left, concatnate_right, frame_rate=5, save_path=VIDEO_STORAGE_PATH)
