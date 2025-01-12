@@ -419,6 +419,7 @@ for video_num in range(START_VIDEO_NUM, 31):
         # 三角測量を用いた3Dポーズ推定(HPE)
         # 高さ、幅（同じカメラを用いるため片方の画像から取得）
         HEIGHT, WIDTH, _ = img1.shape   
+        # CMU Panoptic HDカメラ 1920×1080
         # ランドマーク、マッチングリスト
         result_left, result_right = Landmark_detect(image_left=img1, image_right=img2)
         if (result_left.pose_landmarks is None) or (result_right.pose_landmarks is None):
