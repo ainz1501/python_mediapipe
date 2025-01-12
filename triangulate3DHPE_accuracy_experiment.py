@@ -368,7 +368,8 @@ def create_video_from_images(concatenation_left, concatenation_right, frame_rate
 """
 # メイン処理部
 # 使用ビデオ番号 20,21番の動画は使用できない
-USE_VIDEO_NUM = 22
+USE_MAIN_VIDEO_NUM = 16
+START_VIDEO_NUM = 4
 # 使用データセット
 DATASET_NAME = "171204_pose3"
 # キャリブレーションファイル呼び出し
@@ -376,10 +377,10 @@ calibration_file = open("./panoptic-toolbox/"+DATASET_NAME+"/calibration_"+DATAS
 parameters = json.load(calibration_file)
 print("cam_params:", not(parameters is None))
 
-for video_num in range(USE_VIDEO_NUM, 31):
+for video_num in range(START_VIDEO_NUM, START_VIDEO_NUM+1):
     print("video:",video_num)
     # 入力動画
-    VIDEO1 = cv2.VideoCapture("./panoptic-toolbox/"+DATASET_NAME+"/hdVideos/hd_00_00.mp4")
+    VIDEO1 = cv2.VideoCapture("./panoptic-toolbox/"+DATASET_NAME+"/hdVideos/hd_00_"+str(USE_MAIN_VIDEO_NUM).zfill(2)+".mp4")
     VIDEO2 = cv2.VideoCapture("./panoptic-toolbox/"+DATASET_NAME+"/hdVideos/hd_00_"+str(video_num).zfill(2)+".mp4")
     # 内部パラメータ、外部パラメータ
     param1 = parameters["cameras"][479] # HDカメラ00_00 [479]
@@ -392,7 +393,7 @@ for video_num in range(USE_VIDEO_NUM, 31):
     # 一時的に画像を保存するフォルダのパス
     TEMPORARY_IMAGES_STORAGE_PATH = "./output_images/images_temporary_storage/"
     # 作成した動画を保存するフォルダのパス
-    VIDEO_STORAGE_PATH = "./output_videos/"+DATASET_NAME+"_hdvideo_00&"+str(video_num).zfill(2)+"/"
+    VIDEO_STORAGE_PATH = "./output_videos/"+DATASET_NAME+"_hdvideo_"+str(USE_MAIN_VIDEO_NUM).zfill(2)+"&"+str(video_num).zfill(2)+"/"
     if not os.path.isdir(VIDEO_STORAGE_PATH): # 指定したフォルダがなければ作成
         os.makedirs(VIDEO_STORAGE_PATH)
     # キャプチャーするフレーム間隔

@@ -10,7 +10,7 @@ import time
 # 使用データセット
 DATASET_NAME = "171204_pose3"
 # 使用ビデオ番号
-USE_VIDEO_NUM = 25
+USE_VIDEO_NUM = 28
 
 # キャリブレーションファイル呼び出し
 calibration_file = open("./panoptic-toolbox/"+DATASET_NAME+"/calibration_"+DATASET_NAME+".json")
@@ -23,10 +23,10 @@ mp_drawing = mp.solutions.drawing_utils
 mp_pose = mp.solutions.pose
 
 # 入力動画
-VIDEO1 = cv2.VideoCapture("./panoptic-toolbox/"+DATASET_NAME+"/hdVideos/hd_00_00.mp4")
+VIDEO1 = cv2.VideoCapture("./panoptic-toolbox/"+DATASET_NAME+"/hdVideos/hd_00_06.mp4")
 VIDEO2 = cv2.VideoCapture("./panoptic-toolbox/"+DATASET_NAME+"/hdVideos/hd_00_"+str(USE_VIDEO_NUM)+".mp4")
 # 内部パラメータ、外部パラメータ
-param1 = parameters["cameras"][479] # HDカメラ00_00 [479]
+param1 = parameters["cameras"][479+6] # HDカメラ00_00 [479]
 param2 = parameters["cameras"][479+USE_VIDEO_NUM]
 K_left = np.array(param1["K"])
 R_left, T_left = np.array(param1["R"]), np.array(param1["t"])
@@ -294,8 +294,14 @@ while True:
         # t2 = time.perf_counter()
         # # Landmark_detect_time = t2-t1
 
-        img1_RGB = cv2.cvtColor(img1, cv2.COLOR_BGR2RGB)
-        img2_RGB = cv2.cvtColor(img2, cv2.COLOR_BGR2RGB)
+        # BGR画像をRGBスケールに変化
+        t1 = time.perf_counter()
+        for i in range(test_times): 
+            img1_RGB = cv2.cvtColor(img1, cv2.COLOR_BGR2RGB)
+            img2_RGB = cv2.cvtColor(img2, cv2.COLOR_BGR2RGB)
+            print("times:",i)
+        t2 = time.perf_counter()
+        bgr2rgb_time = t2-t1
 
         # # 相対的3Dランドマーク推定（左画像）
         # t1 = time.perf_counter()
@@ -358,11 +364,11 @@ while True:
         # entire_time = t2-t1
 
         # ループ回数表示
-        t1 = time.perf_counter()
-        for i in range(test_times):
-            print("times:",i)
-        t2 = time.perf_counter()
-        print_times_time = t2-t1
+        # t1 = time.perf_counter()
+        # for i in range(test_times):
+        #     print("times:",i)
+        # t2 = time.perf_counter()
+        # print_times_time = t2-t1
 
         break
     frame_num += 1
@@ -380,9 +386,10 @@ while True:
 # print("Normalized_to_screen_coord:", Normalized_to_screen_coord_time)
 # print("Projection_mat_calc:", Projection_mat_calc_time)
 # print("Triangulate_3Dpoint:", Triangulate_3Dpoint_time)
-print("print times:", print_times_time)
+# print("print times:", print_times_time)
 
 # print("entire culc:",Landmark_detect_time+Normalized_to_screen_coord_time+Projection_mat_calc_time+Triangulate_3Dpoint_time)
+print("BGR2RGB:", bgr2rgb_time)
 # print("Landmark_detect left-image:", Landmark_detect_left_time)
 # print("Landmark_detect right-image:", Landmark_detect_right_time)
 # print("Landmark_detect both-image:", Landmark_detect_both_time)
