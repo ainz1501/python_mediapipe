@@ -5,47 +5,31 @@ import numpy as np
 from datetime import datetime 
 import sys
 import json
-import time
 import glob
+import os
 
-# 使用データセット
-DATASET_NAME = "171204_pose3"
-# 使用ビデオ番号
-USE_VIDEO_NUM = 25
+"""
+該当するフレームのみを取り出して3Dポーズを推定する
+・フレームリストのどれかを取り出す
+・そのフレーム数に達するまでreadをループ
+・両カメラの該当フレームを3DHPEに入力
 
-# キャリブレーションファイル呼び出し
-calibration_file = open("./panoptic-toolbox/"+DATASET_NAME+"/calibration_"+DATASET_NAME+".json")
-parameters = json.load(calibration_file)
-print("cam_params:", not(parameters is None))
+出力となる比較用画像
+3Dプロット
 
+"""
 # MediaPipe Holisticモジュールを初期化
 mp_holistic = mp.solutions.holistic
 mp_drawing = mp.solutions.drawing_utils
 mp_pose = mp.solutions.pose
-
-# 入力動画
-VIDEO1 = cv2.VideoCapture("./panoptic-toolbox/"+DATASET_NAME+"/hdVideos/hd_00_00.mp4")
-VIDEO2 = cv2.VideoCapture("./panoptic-toolbox/"+DATASET_NAME+"/hdVideos/hd_00_"+str(USE_VIDEO_NUM)+".mp4")
-# 内部パラメータ、外部パラメータ
-param1 = parameters["cameras"][479] # HDカメラ00_00 [479]
-param2 = parameters["cameras"][479+USE_VIDEO_NUM]
-K_left = np.array(param1["K"])
-R_left, T_left = np.array(param1["R"]), np.array(param1["t"])
-K_right = np.array(param2["K"])
-R_right, T_right = np.array(param2["R"]), np.array(param2["t"])
-
-
-# レンダリング用入力
-# 一時的に画像を保存するフォルダパス
-TEMPORARY_IMAGES_STORAGE_PATH = "./output_images/images_temporary_storage/"
-VIDEO_STORAGE_PATH = "./output_videos/"+DATASET_NAME+"_hdvideo_00&25/"
+ 
 # ボーン情報
 POSE_CONNECTIONS = mp_pose.POSE_CONNECTIONS
 # レンダリング情報
 JOINT_STYLE = mp_drawing.DrawingSpec(color=(0,0,255), thickness=5, circle_radius=3)
 BONE_STYLE = mp_drawing.DrawingSpec(color=(200,200,0), thickness=5)
+mp_drawing._VISIBILITY_THRESHOLD = 0.0 # 画像に表示する際のランドマークの信用度閾値
 
-# より正確な時間の計測のため、prof_counter関数自体の処理時間を確かめる
 # 処理関数
 def Landmark_detect(image_left, image_right):
     """
@@ -296,6 +280,7 @@ def plot_2Dskeleton(landmarks, connection):
         
     plt.gca().invert_yaxis()  # Y座標を反転して画像と一致させる
     plt.axis('equal')         # アスペクト比を正確にする
+    fig.savefig()
     plt.show()
 
 def plot_3Dskeleton(landmarks, connections, matchlist, save_path):
@@ -367,10 +352,10 @@ def concatenate_images(frame_num, storage_path, save_path, show_flag):
 
     return concatenation_left_image, concatenation_right_image
 
-def create_video_from_images(concatenation_left, concatenation_right, save_path):
+def create_video_from_images(concatenation_left, concatenation_right, frame_rate, save_path):
     # 左カメラ各フレームの比較用画像読み込み
     frames_left = []
-    for img in concatnate_left:
+    for img in concatenation_left:
         if img is None:
             break
         frames_left.append(img)
@@ -383,96 +368,102 @@ def create_video_from_images(concatenation_left, concatenation_right, save_path)
         frames_right.append(img)
 
     HEIGHT, WIDTH, _ = frames_left[0].shape
-    out_Lvideo = cv2.VideoWriter(save_path+"output_left_video.mp4", cv2.VideoWriter_fourcc(*"mp4v"), 10, (WIDTH, HEIGHT))
-    out_Rvideo = cv2.VideoWriter(save_path+"output_right_video.mp4", cv2.VideoWriter_fourcc(*"mp4v"), 10, (WIDTH, HEIGHT)) 
-    
+    out_Lvideo = cv2.VideoWriter(save_path+"output_left_video.mp4", cv2.VideoWriter_fourcc(*"mp4v"), frame_rate, (WIDTH, HEIGHT))
+    out_Rvideo = cv2.VideoWriter(save_path+"output_right_video.mp4", cv2.VideoWriter_fourcc(*"mp4v"), frame_rate, (WIDTH, HEIGHT)) 
+
     for i in range(len(frames_left)):
         out_Lvideo.write(frames_left[i])
         out_Rvideo.write(frames_right[i])
-
-def mean_processing_time_calc(time_list, through_list):
-    t = []
-    for index, flag in enumerate(through_list):
-        if flag is 1:
-            t.append(time_list[index])
-    average = sum(t)/len(t)
-
-    return average
-
-    
+# create_video_from_images(storage_path=FRAMES_STORAGE_PATH)
 """
 -------------------------------------------------------------------------------------------------------
 """
 # メイン処理部
-frame_num = 1
-capture_rate = 50
-through_list = []
-entire_time_list = []
-Landmark_detect_time_list = []
-Normalized_to_screen_coord_time_list = []
-Projection_mat_calc_time_list = []
-Triangulate_3Dpoint_time_list = []
+# 使用ビデオ番号 20,21番の動画は使用できない
+USE_MAIN_VIDEO_NUM = 0
+START_VIDEO_NUM = 1
+FRAME_NUM_LIST = [1400, 6200]
+# 使用データセット
+DATASET_NAME = "171204_pose3"
+# キャリブレーションファイル呼び出し
+calibration_file = open("./panoptic-toolbox/"+DATASET_NAME+"/calibration_"+DATASET_NAME+".json")
+parameters = json.load(calibration_file)
+print("cam_params:", not(parameters is None))
 
-while True:
-    print("frame "+str(frame_num)) # 現在のキャプチャフレーム数を表示
-    
-    # キャプチャー処理
-    for i in range(capture_rate): # 50フレームごとにキャプチャ
-        # ビデオキャプチャー
-        ret1, img1 = VIDEO1.read()
-        ret2, img2 = VIDEO2.read()
-    if not (ret1 and ret2):
-        print("breaked frame:", frame_num)
-        break
-    
+for video_num in range(START_VIDEO_NUM, 31):
+    print("video:",video_num)
+    # 入力動画
+    VIDEO1 = cv2.VideoCapture("./panoptic-toolbox/"+DATASET_NAME+"/hdVideos/hd_00_"+str(USE_MAIN_VIDEO_NUM).zfill(2)+".mp4")
+    VIDEO2 = cv2.VideoCapture("./panoptic-toolbox/"+DATASET_NAME+"/hdVideos/hd_00_"+str(video_num).zfill(2)+".mp4")
+    # 内部パラメータ、外部パラメータ
+    param1 = parameters["cameras"][479+USE_MAIN_VIDEO_NUM] # HDカメラ00_00 [479]
+    param2 = parameters["cameras"][479+video_num]
+    K_left = np.array(param1["K"])
+    R_left, T_left = np.array(param1["R"]), np.array(param1["t"])
+    K_right = np.array(param2["K"])
+    R_right, T_right = np.array(param2["R"]), np.array(param2["t"])
 
-    # 三角測量を用いた3Dポーズ推定(HPE)
-    # 高さ、幅（同じカメラを用いるため片方の画像から取得）
-    HEIGHT, WIDTH, _ = img1.shape   
-    # ランドマーク、マッチングリスト
-    entire_t1 = time.perf_counter()
-    t1 = time.perf_counter()
-    result_left, result_right = Landmark_detect(image_left=img1, image_right=img2)
-    t2 = time.perf_counter()
-    Landmark_detect_time_list.append(t2-t1)
-    if (result_left.pose_landmarks is None) or (result_right.pose_landmarks is None):
-        through_list.append(0)
-        print("no pose")
-    else:
-        through_list.append(1)
-        # 画像座標系への変換(同時に体のランドマークのみ使用)
-        t1 = time.perf_counter()
-        pose_left, pose_right = Normalized_to_screen_coord(result_left.pose_landmarks, result_right.pose_landmarks, WIDTH, HEIGHT)
-        t2 = time.perf_counter()
-        Normalized_to_screen_coord_time_list.append(t2-t1)
-        # print("left=","\n",pose_left)
-        # print("right=","\n",pose_right)
-        # 投影行列を計算
-        t1 = time.perf_counter()
-        Pleft, Pright = Projection_mat_calc(K_left, R_left, T_left, K_right, R_right, T_right)
-        t2 = time.perf_counter()
-        Projection_mat_calc_time_list.append(t2-t1)
-        # 3次元位置を復元
-        t1 = time.perf_counter()
-        landmark3D = Triangulate_3Dpoint(Pleft, Pright, pose_left, pose_right)        
-        t2 = time.perf_counter()
-        Triangulate_3Dpoint_time_list.append(t2-t1)
-    
-    entire_t2 = time.perf_counter()
-    entire_time_list.append(t2-t1)
-    # print("landmark3D:","\n",landmark3D)
+    # 一時的に画像を保存するフォルダのパス
+    TEMPORARY_IMAGES_STORAGE_PATH = "./output_images/images_temporary_storage/"
+    # 作成した動画を保存するフォルダのパス
+    VIDEO_STORAGE_PATH = "./output_videos/"+DATASET_NAME+"_hdvideo_"+str(USE_MAIN_VIDEO_NUM).zfill(2)+"&"+str(video_num).zfill(2)+"/"
+    if not os.path.isdir(VIDEO_STORAGE_PATH): # 指定したフォルダがなければ作成
+        os.makedirs(VIDEO_STORAGE_PATH)
+    # キャプチャーするフレーム間隔
+    capture_rate = 100
 
-    cv2.destroyAllWindows() 
-    frame_num += 1
+    frame_num = 1
+    concatnate_left = []
+    concatnate_right = []
+    while True:
+        print("frame "+str(frame_num)) # 現在のキャプチャフレーム数を表示
+        
+        # キャプチャー処理
+        for i in range(capture_rate): # capture_rateフレームごとにキャプチャ
+            # ビデオキャプチャー
+            ret1, img1 = VIDEO1.read()
+            ret2, img2 = VIDEO2.read()
+        if not (ret1 and ret2):
+            print("breaked frame:", frame_num)
+            break
+        
+        # 三角測量を用いた3Dポーズ推定(HPE)
+        # 高さ、幅（同じカメラを用いるため片方の画像から取得）
+        HEIGHT, WIDTH, _ = img1.shape   
+        # CMU Panoptic HDカメラ 1920×1080
+        # ランドマーク、マッチングリスト
+        result_left, result_right = Landmark_detect(image_left=img1, image_right=img2)
+        if (result_left.pose_landmarks is None) or (result_right.pose_landmarks is None):
+            if result_left.pose_landmarks is None:
+                cv2.imwrite(VIDEO_STORAGE_PATH+"disable_frame_L_"+str(frame_num)+".png", img1)
+            if result_right.pose_landmarks is None:
+                cv2.imwrite(VIDEO_STORAGE_PATH+"disable_frame_L_"+str(frame_num)+".png", img1)
+            print("no pose")
+        else:
+            # 画像座標系への変換(同時に体のランドマークのみ使用)
+            pose_left, pose_right = Normalized_to_screen_coord(result_left.pose_landmarks, result_right.pose_landmarks, WIDTH, HEIGHT)
+            # print("left=","\n",pose_left)
+            # print("right=","\n",pose_right)
+            # 投影行列を計算
+            Pleft, Pright = Projection_mat_calc(K_left, R_left, T_left, K_right, R_right, T_right)
+            # 3次元位置を復元
+            landmark3D = Triangulate_3Dpoint(Pleft, Pright, pose_left, pose_right)
+            # print("landmark3D:","\n",landmark3D)
 
-entire_ave = mean_processing_time_calc(entire_time_list, through_list)
-Landmark_detect_ave = mean_processing_time_calc(Landmark_detect_time_list, through_list)
-Normalized_to_screen_coord_ave = mean_processing_time_calc(Normalized_to_screen_coord_time_list, through_list)
-Projection_mat_calc_ave = mean_processing_time_calc(Projection_mat_calc_time_list, through_list)
-Triangulate_3Dpoint_ave = mean_processing_time_calc(Triangulate_3Dpoint_time_list, through_list)
+            # 比較用画像を作成
+            annotate_image(img1, result_left.pose_landmarks, img2, result_right.pose_landmarks, 
+                                                                    POSE_CONNECTIONS, JOINT_STYLE, BONE_STYLE)
+            matching_list = Matching_landmarks(result_left.pose_landmarks, result_right.pose_landmarks, enable=False)
+            fig, ax = plot_3Dskeleton(landmark3D, POSE_CONNECTIONS, matching_list, save_path=TEMPORARY_IMAGES_STORAGE_PATH)
+            # 比較用画像を横に連結する
+            out_left, out_right = concatenate_images(frame_num, storage_path=TEMPORARY_IMAGES_STORAGE_PATH, save_path=None, show_flag=False)
+            concatnate_left.append(out_left)
+            concatnate_right.append(out_right)
+            
+            print("out num ",len(concatnate_left))
+            # cv2.waitKey(0)
+            cv2.destroyAllWindows() 
+        frame_num += 1
 
-print("Landmark_detect per:", Landmark_detect_ave/entire_ave)
-print("Normalized_to_screen_coord per:", Normalized_to_screen_coord_ave/entire_ave)
-print("Projection_mat_calc per:", Projection_mat_calc_ave/entire_ave)
-print("Triangulate_3Dpoint per:", Triangulate_3Dpoint_ave/entire_ave)
-print("finish")
+    # 比較用動画の作成
+    create_video_from_images(concatnate_left, concatnate_right, frame_rate=5, save_path=VIDEO_STORAGE_PATH)
