@@ -23,10 +23,10 @@ mp_drawing = mp.solutions.drawing_utils
 mp_pose = mp.solutions.pose
 
 # 入力動画
-VIDEO1 = cv2.VideoCapture("./panoptic-toolbox/"+DATASET_NAME+"/hdVideos/hd_00_06.mp4")
+VIDEO1 = cv2.VideoCapture("./panoptic-toolbox/"+DATASET_NAME+"/hdVideos/hd_00_00.mp4")
 VIDEO2 = cv2.VideoCapture("./panoptic-toolbox/"+DATASET_NAME+"/hdVideos/hd_00_"+str(USE_VIDEO_NUM)+".mp4")
 # 内部パラメータ、外部パラメータ
-param1 = parameters["cameras"][479+6] # HDカメラ00_00 [479]
+param1 = parameters["cameras"][479] # HDカメラ00_00 [479]
 param2 = parameters["cameras"][479+USE_VIDEO_NUM]
 K_left = np.array(param1["K"])
 R_left, T_left = np.array(param1["R"]), np.array(param1["t"])
