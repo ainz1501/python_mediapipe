@@ -270,6 +270,7 @@ def plot_2Dskeleton(landmarks, connection):
         
     plt.gca().invert_yaxis()  # Y座標を反転して画像と一致させる
     plt.axis('equal')         # アスペクト比を正確にする
+    fig.savefig()
     plt.show()
 
 def plot_3Dskeleton(landmarks, connections, matchlist, save_path):
@@ -369,8 +370,8 @@ def create_video_from_images(concatenation_left, concatenation_right, frame_rate
 """
 # メイン処理部
 # 使用ビデオ番号 20,21番の動画は使用できない
-USE_MAIN_VIDEO_NUM = 16
-START_VIDEO_NUM = 4
+USE_MAIN_VIDEO_NUM = 0
+START_VIDEO_NUM = 22
 # 使用データセット
 DATASET_NAME = "171204_pose3"
 # キャリブレーションファイル呼び出し
@@ -378,7 +379,7 @@ calibration_file = open("./panoptic-toolbox/"+DATASET_NAME+"/calibration_"+DATAS
 parameters = json.load(calibration_file)
 print("cam_params:", not(parameters is None))
 
-for video_num in range(START_VIDEO_NUM, START_VIDEO_NUM+1):
+for video_num in range(START_VIDEO_NUM, 31):
     print("video:",video_num)
     # 入力動画
     VIDEO1 = cv2.VideoCapture("./panoptic-toolbox/"+DATASET_NAME+"/hdVideos/hd_00_"+str(USE_MAIN_VIDEO_NUM).zfill(2)+".mp4")
