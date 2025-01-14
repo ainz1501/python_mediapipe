@@ -326,9 +326,9 @@ while True:
 
     gt_num += 100
 
-# 使用ビデオ番号
-VIDEO1_NUM = 0
-VIDEO2_NUM = 1
+# 使用ビデオ番号 18と23は動画を通して体が見切れず、両手両足が大きく隠れることもなかったため（片手片足が大きく隠れるのは少しあり）
+VIDEO1_NUM = 18
+VIDEO2_NUM = 23
 # 3dプロット保存パス
 USING_VIDEO = str(VIDEO1_NUM).zfill(2)+"&"+str(VIDEO2_NUM).zfill(2)
 PLOT_3D_SAVE_PATH = "./mp_data_"+DATASET_NAME+"/"+USING_VIDEO+"/"
@@ -428,7 +428,7 @@ while True:
 
 # 3D比較
 loop_times = min(len(gt_body_list), len(mp_landmark_list))
-
+frame_num = 137
 for i in range(loop_times):
     gt_data = gt_body_list[i]
     mp_data = mp_landmark_list[i]
@@ -436,7 +436,11 @@ for i in range(loop_times):
     fig = plt.figure(figsize = (8, 8))
     ax= fig.add_subplot(111, projection='3d')
     # ランドマークをプロットに描写
-    ax.scatter(gt_data[:, 0], gt_data[:,1],gt_data[:,2], s = 1, c = "blue") # 正解データ
+    for gt_landmark in gt_data:
+        if gt_landmark[3] != -1.0:
+            ax.scatter(gt_landmark[0], gt_landmark[1],gt_landmark[2], s = 1, c = "blue") # 正解データ
+        else:
+            print("through:",gt_landmark)
     ax.scatter(mp_data[:, 0], mp_data[:,1],mp_data[:,2], s = 1, c = "red") # MediaPipe
     set_equal_aspect(ax)
     # 骨格情報からボーンを形成
@@ -457,10 +461,11 @@ for i in range(loop_times):
     ax.set_xlabel("X")
     ax.set_ylabel("Y")
     ax.set_zlabel("Z")
-    plt.title("3D Skeleton Visualization")
+    plt.title("frame_"+str(frame_num).zfill(4))
     # 対象を正面から大体hd_00カメラの位置から開始
     ax.view_init(elev=180, azim=5, roll=-90)
     plt.show()
+    frame_num += 100
 
 plt.close()
 
