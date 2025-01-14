@@ -63,7 +63,7 @@ def Landmark_detect(image_left, image_right):
     image_rightRGB = cv2.cvtColor(image_right, cv2.COLOR_BGR2RGB)
 
     # ランドマーク推定 静止画入力 -> static_image_mode=True
-    with mp_holistic.Holistic(static_image_mode=True) as holistic:
+    with mp_holistic.Holistic(static_image_mode=True, model_complexity = 1) as holistic:
         result_left = holistic.process(image_leftRGB)
         result_right = holistic.process(image_rightRGB)
 
@@ -286,13 +286,13 @@ while True:
     if (result_left.pose_landmarks is None) or (result_right.pose_landmarks is None): # 両画像が推定できる画像かを判定
         print("no pose")
     else:
-        # # 相対的3Dランドマーク推定
-        # t1 = time.perf_counter()
-        # for i in range(test_times): 
-        #     _, _ = Landmark_detect(img1, img2)
-        #     print("times:",i)
-        # t2 = time.perf_counter()
-        # # Landmark_detect_time = t2-t1
+        # 相対的3Dランドマーク推定
+        t1 = time.perf_counter()
+        for i in range(test_times): 
+            _, _ = Landmark_detect(img1, img2)
+            print("times:",i)
+        t2 = time.perf_counter()
+        Landmark_detect_time = t2-t1
 
         # BGR画像をRGBスケールに変化
         t1 = time.perf_counter()
@@ -303,72 +303,72 @@ while True:
         t2 = time.perf_counter()
         bgr2rgb_time = t2-t1
 
-        # # 相対的3Dランドマーク推定（左画像）
-        # t1 = time.perf_counter()
-        # for i in range(test_times): 
-        #     with mp_holistic.Holistic(static_image_mode=True) as holistic:
-        #         result_left = holistic.process(img1_RGB)
-        #     print("times:",i)
-        # t2 = time.perf_counter()
-        # Landmark_detect_left_time = t2-t1
+        # 相対的3Dランドマーク推定（左画像）
+        t1 = time.perf_counter()
+        for i in range(test_times): 
+            with mp_holistic.Holistic(static_image_mode=True) as holistic:
+                result_left = holistic.process(img1_RGB)
+            print("times:",i)
+        t2 = time.perf_counter()
+        Landmark_detect_left_time = t2-t1
         
-        # # 相対的3Dランドマーク推定（右画像）
-        # t1 = time.perf_counter()
-        # for i in range(test_times): 
-        #     with mp_holistic.Holistic(static_image_mode=True) as holistic:
-        #         result_left = holistic.process(img1_RGB)
-        #     print("times:",i)
-        # t2 = time.perf_counter()
-        # Landmark_detect_right_time = t2-t1
+        # 相対的3Dランドマーク推定（右画像）
+        t1 = time.perf_counter()
+        for i in range(test_times): 
+            with mp_holistic.Holistic(static_image_mode=True) as holistic:
+                result_left = holistic.process(img1_RGB)
+            print("times:",i)
+        t2 = time.perf_counter()
+        Landmark_detect_right_time = t2-t1
 
-        # # 相対的3Dランドマーク推定（左右画像）
-        # t1 = time.perf_counter()
-        # for i in range(test_times): 
-        #     with mp_holistic.Holistic(static_image_mode=True) as holistic:
-        #         result_left = holistic.process(img1_RGB)
-        #         result_right = holistic.process(img2_RGB)
-        #     print("times:",i)
-        # t2 = time.perf_counter()
-        # Landmark_detect_both_time = t2-t1
+        # 相対的3Dランドマーク推定（左右画像）
+        t1 = time.perf_counter()
+        for i in range(test_times): 
+            with mp_holistic.Holistic(static_image_mode=True) as holistic:
+                result_left = holistic.process(img1_RGB)
+                result_right = holistic.process(img2_RGB)
+            print("times:",i)
+        t2 = time.perf_counter()
+        Landmark_detect_both_time = t2-t1
 
-        # # 画像座標系への変換(同時に体のランドマークのみ使用)
-        # t1 = time.perf_counter()
-        # for i in range(test_times):
-        #     pose_left, pose_right = Normalized_to_screen_coord(result_left.pose_landmarks, result_right.pose_landmarks, WIDTH, HEIGHT)
-        #     print("times:",i)
-        # t2 = time.perf_counter()
-        # Normalized_to_screen_coord_time = t2-t1
+        # 画像座標系への変換(同時に体のランドマークのみ使用)
+        t1 = time.perf_counter()
+        for i in range(test_times):
+            pose_left, pose_right = Normalized_to_screen_coord(result_left.pose_landmarks, result_right.pose_landmarks, WIDTH, HEIGHT)
+            print("times:",i)
+        t2 = time.perf_counter()
+        Normalized_to_screen_coord_time = t2-t1
 
-        # # 投影行列を計算
-        # t1 = time.perf_counter()
-        # for i in range(test_times):
-        #     Pleft, Pright = Projection_mat_calc(K_left, R_left, T_left, K_right, R_right, T_right)
-        #     print("times:",i)
-        # t2 = time.perf_counter()
-        # Projection_mat_calc_time = t2-t1
+        # 投影行列を計算
+        t1 = time.perf_counter()
+        for i in range(test_times):
+            Pleft, Pright = Projection_mat_calc(K_left, R_left, T_left, K_right, R_right, T_right)
+            print("times:",i)
+        t2 = time.perf_counter()
+        Projection_mat_calc_time = t2-t1
 
-        # # 3次元位置を復元
-        # t1 = time.perf_counter()
-        # for i in range(test_times):
-        #     landmark3D = Triangulate_3Dpoint(Pleft, Pright, pose_left, pose_right)        
-        #     print("times:",i)
-        # t2 = time.perf_counter()
-        # Triangulate_3Dpoint_time = t2-t1
+        # 3次元位置を復元
+        t1 = time.perf_counter()
+        for i in range(test_times):
+            landmark3D = Triangulate_3Dpoint(Pleft, Pright, pose_left, pose_right)        
+            print("times:",i)
+        t2 = time.perf_counter()
+        Triangulate_3Dpoint_time = t2-t1
 
-        # # 全体の処理
-        # t1 = time.perf_counter()
-        # for i in range(test_times):
-        #     landmark3D = Triangulate3DHPE(img1, img2, K_left, R_left, T_left, K_right, R_right, T_right)
-        #     print("times:",i)
-        # t2 = time.perf_counter()
-        # entire_time = t2-t1
+        # 全体の処理
+        t1 = time.perf_counter()
+        for i in range(test_times):
+            landmark3D = Triangulate3DHPE(img1, img2, K_left, R_left, T_left, K_right, R_right, T_right)
+            print("times:",i)
+        t2 = time.perf_counter()
+        entire_time = t2-t1
 
         # ループ回数表示
-        # t1 = time.perf_counter()
-        # for i in range(test_times):
-        #     print("times:",i)
-        # t2 = time.perf_counter()
-        # print_times_time = t2-t1
+        t1 = time.perf_counter()
+        for i in range(test_times):
+            print("times:",i)
+        t2 = time.perf_counter()
+        print_times_time = t2-t1
 
         break
     frame_num += 1
@@ -381,24 +381,24 @@ while True:
 # Projection_mat_calc_ave = sum(Projection_mat_calc_time_list)/len(Projection_mat_calc_time_list)
 # Triangulate_3Dpoint_ave = sum(Triangulate_3Dpoint_time_list)/len(Triangulate_3Dpoint_time_list)
 
-# print("entire:", entire_time)
-# print("Landmark_detect:", Landmark_detect_time)
-# print("Normalized_to_screen_coord:", Normalized_to_screen_coord_time)
-# print("Projection_mat_calc:", Projection_mat_calc_time)
-# print("Triangulate_3Dpoint:", Triangulate_3Dpoint_time)
-# print("print times:", print_times_time)
+print("entire:", entire_time)
+print("Landmark_detect:", Landmark_detect_time)
+print("Normalized_to_screen_coord:", Normalized_to_screen_coord_time)
+print("Projection_mat_calc:", Projection_mat_calc_time)
+print("Triangulate_3Dpoint:", Triangulate_3Dpoint_time)
+print("print times:", print_times_time)
 
-# print("entire culc:",Landmark_detect_time+Normalized_to_screen_coord_time+Projection_mat_calc_time+Triangulate_3Dpoint_time)
+print("entire culc:",Landmark_detect_time+Normalized_to_screen_coord_time+Projection_mat_calc_time+Triangulate_3Dpoint_time)
 print("BGR2RGB:", bgr2rgb_time)
-# print("Landmark_detect left-image:", Landmark_detect_left_time)
-# print("Landmark_detect right-image:", Landmark_detect_right_time)
-# print("Landmark_detect both-image:", Landmark_detect_both_time)
+print("Landmark_detect left-image:", Landmark_detect_left_time)
+print("Landmark_detect right-image:", Landmark_detect_right_time)
+print("Landmark_detect both-image:", Landmark_detect_both_time)
 
-# print("Landmark_detect per:", "{:.3f}".format(Landmark_detect_time/entire_time*100), "%")
-# print("Normalized_to_screen_coord per:", "{:.3f}".format(Normalized_to_screen_coord_time/entire_time*100), "%")
-# print("Projection_mat_calc per:", "{:.3f}".format(Projection_mat_calc_time/entire_time*100), "%")
-# print("Triangulate_3Dpoint per:", "{:.3f}".format(Triangulate_3Dpoint_time/entire_time*100), "%")
+print("Landmark_detect per:", "{:.3f}".format(Landmark_detect_time/entire_time*100), "%")
+print("Normalized_to_screen_coord per:", "{:.3f}".format(Normalized_to_screen_coord_time/entire_time*100), "%")
+print("Projection_mat_calc per:", "{:.3f}".format(Projection_mat_calc_time/entire_time*100), "%")
+print("Triangulate_3Dpoint per:", "{:.3f}".format(Triangulate_3Dpoint_time/entire_time*100), "%")
 
-# print("entire fps:", "{:.4f}".format(10000/entire_time)) # 1/(entire_time/10000)
+print("entire fps:", "{:.4f}".format(10000/entire_time)) # 1/(entire_time/10000)
 
 print("finish")

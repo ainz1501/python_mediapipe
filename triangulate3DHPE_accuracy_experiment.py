@@ -2,10 +2,7 @@ import cv2
 import mediapipe as mp
 import matplotlib.pyplot as plt
 import numpy as np
-from datetime import datetime 
-import sys
 import json
-import glob
 import os
 
 # MediaPipe Holisticモジュールを初期化
@@ -13,13 +10,14 @@ mp_holistic = mp.solutions.holistic
 mp_drawing = mp.solutions.drawing_utils
 mp_pose = mp.solutions.pose
 
-# hd00_2 13枚目 
 # ボーン情報
 POSE_CONNECTIONS = mp_pose.POSE_CONNECTIONS
 # レンダリング情報
 JOINT_STYLE = mp_drawing.DrawingSpec(color=(0,0,255), thickness=5, circle_radius=3)
 BONE_STYLE = mp_drawing.DrawingSpec(color=(200,200,0), thickness=5)
 mp_drawing._VISIBILITY_THRESHOLD = 0.0 # 画像に表示する際のランドマークの信用度閾値
+# 使用データセット
+DATASET_NAME = "171204_pose3"
 
 # 処理関数
 def Landmark_detect(image_left, image_right):
@@ -274,7 +272,7 @@ def plot_2Dskeleton(landmarks, connection):
     fig.savefig()
     plt.show()
 
-def plot_3Dskeleton(landmarks, connections, matchlist, save_path):
+def plot_3Dskeleton(landmarks, connections, save_path):
     fig = plt.figure(figsize = (8, 8))
     ax= fig.add_subplot(111, projection='3d')
     ax.scatter(landmarks[:, 0], landmarks[:,1],landmarks[:,2], s = 1, c = "blue")
@@ -282,21 +280,25 @@ def plot_3Dskeleton(landmarks, connections, matchlist, save_path):
     # 骨格情報からボーンを形成
     for connection in connections:
         start_joint, end_joint = connection
-        if matchlist[start_joint] == 1 and matchlist[end_joint] == 1:
-            x = [landmarks[start_joint, 0], landmarks[end_joint, 0]]
-            y = [landmarks[start_joint, 1], landmarks[end_joint, 1]]
-            z = [landmarks[start_joint, 2], landmarks[end_joint, 2]]
-            plt.plot(x, y, z, c='red', linewidth=1)
+        x = [landmarks[start_joint, 0], landmarks[end_joint, 0]]
+        y = [landmarks[start_joint, 1], landmarks[end_joint, 1]]
+        z = [landmarks[start_joint, 2], landmarks[end_joint, 2]]
+        plt.plot(x, y, z, c='red', linewidth=1)
             
     ax.set_xlabel("X")
     ax.set_ylabel("Y")
     ax.set_zlabel("Z")
     plt.title("3D Skeleton Visualization")
-    # 対象を正面から見た3Dプロットを画像として保存
+    # 対象を正面から大体hd_00カメラの位置から見た画像を保存
     ax.view_init(elev=180, azim=5, roll=-90)
     fig.savefig(save_path+"3dplot.png")
+    
+    plt.close()
 
     return fig, ax
+
+# def plot_gt3Dskeleton():
+#     gt_x, gt_y, gt_z = 
 
 # プロットの軸を等間隔にする
 def set_equal_aspect(ax):
@@ -370,11 +372,16 @@ def create_video_from_images(concatenation_left, concatenation_right, frame_rate
 -------------------------------------------------------------------------------------------------------
 """
 # メイン処理部
+"""
+入力データ
+・各カメラの動画
+・正解データ
+出力データ
+・正解データと3Dプロットの比較動画（各カメラペアのもの）
+"""
 # 使用ビデオ番号 20,21番の動画は使用できない
 USE_MAIN_VIDEO_NUM = 0
 START_VIDEO_NUM = 22
-# 使用データセット
-DATASET_NAME = "171204_pose3"
 # キャリブレーションファイル呼び出し
 calibration_file = open("./panoptic-toolbox/"+DATASET_NAME+"/calibration_"+DATASET_NAME+".json")
 parameters = json.load(calibration_file)
@@ -432,20 +439,16 @@ for video_num in range(START_VIDEO_NUM, 31):
         else:
             # 画像座標系への変換(同時に体のランドマークのみ使用)
             pose_left, pose_right = Normalized_to_screen_coord(result_left.pose_landmarks, result_right.pose_landmarks, WIDTH, HEIGHT)
-            # print("left=","\n",pose_left)
-            # print("right=","\n",pose_right)
             # 投影行列を計算
             Pleft, Pright = Projection_mat_calc(K_left, R_left, T_left, K_right, R_right, T_right)
             # 3次元位置を復元
             landmark3D = Triangulate_3Dpoint(Pleft, Pright, pose_left, pose_right)
-            # print("landmark3D:","\n",landmark3D)
 
             # 比較用画像を作成
             annotate_image(img1, result_left.pose_landmarks, img2, result_right.pose_landmarks, 
                                                                     POSE_CONNECTIONS, JOINT_STYLE, BONE_STYLE)
-            matching_list = Matching_landmarks(result_left.pose_landmarks, result_right.pose_landmarks, enable=False)
-            fig, ax = plot_3Dskeleton(landmark3D, POSE_CONNECTIONS, matching_list, save_path=TEMPORARY_IMAGES_STORAGE_PATH)
-            # 比較用画像を横に連結する
+            fig, ax = plot_3Dskeleton(landmark3D, POSE_CONNECTIONS, save_path=TEMPORARY_IMAGES_STORAGE_PATH)
+            # 比較用画像を横に連結する（アノテーション前＋アノテーション後＋3Dプロット）
             out_left, out_right = concatenate_images(frame_num, storage_path=TEMPORARY_IMAGES_STORAGE_PATH, save_path=None, show_flag=False)
             concatnate_left.append(out_left)
             concatnate_right.append(out_right)
