@@ -3,15 +3,13 @@ import mediapipe as mp
 import numpy as np
 import matplotlib.pyplot as plt
 import os
-import glob
 import json
-import re
-
-# 使用ビデオ番号 20,21番の動画は使用できない
-TEMPORARY_IMAGES_STORAGE_PATH = "./output_images/images_temporary_storage/"
+import sys
 
 # 使用データセット
 DATASET_NAME = "171204_pose3"
+# 画像を一時的に保存するフォルダパス
+TEMPORARY_IMAGES_STORAGE_PATH = "./output_images/images_temporary_storage/"
 # 正解データセットのボーン情報
 body_edges = np.array([[1,2],[1,4],[4,5],[5,6],[1,3],[3,7],[7,8],[8,9],[3,13],[13,14],[14,15],[1,10],[10,11],[11,12]])-1
 # 正解データ呼び出し用パス
@@ -31,6 +29,39 @@ POSE_CONNECTIONS = mp_pose.POSE_CONNECTIONS
 JOINT_STYLE = mp_drawing.DrawingSpec(color=(0,0,255), thickness=5, circle_radius=3)
 BONE_STYLE = mp_drawing.DrawingSpec(color=(200,200,0), thickness=5)
 mp_drawing._VISIBILITY_THRESHOLD = 0.0 # 画像に表示する際のランドマークの信用度閾値
+
+# 使用ビデオ番号 18と23は動画を通して体が見切れず、両手両足が大きく隠れることもなかったため（片手片足が大きく隠れるのは少しあり）
+VIDEO1_NUM = 18
+VIDEO2_NUM = 23
+# 3dプロット保存パス
+USING_VIDEO = str(VIDEO1_NUM).zfill(2)+"&"+str(VIDEO2_NUM).zfill(2)
+SAVE_FOLDER_PATH = "./output_images/"+DATASET_NAME+"_"+USING_VIDEO+"/"
+if not os.path.isdir(SAVE_FOLDER_PATH): # 指定したフォルダがなければ作成
+    os.makedirs(SAVE_FOLDER_PATH)
+
+# キャリブレーションファイル呼び出し
+calibration_file = open("./panoptic-toolbox/"+DATASET_NAME+"/calibration_"+DATASET_NAME+".json")
+parameters = json.load(calibration_file)
+print("cam_params:", not(parameters is None))
+# 入力動画
+VIDEO1 = cv2.VideoCapture("./panoptic-toolbox/"+DATASET_NAME+"/hdVideos/hd_00_"+str(VIDEO1_NUM).zfill(2)+".mp4")
+VIDEO2 = cv2.VideoCapture("./panoptic-toolbox/"+DATASET_NAME+"/hdVideos/hd_00_"+str(VIDEO2_NUM).zfill(2)+".mp4")
+# 内部パラメータ、外部パラメータ
+param1 = parameters["cameras"][479+VIDEO1_NUM] # HDカメラ00_00 [479]
+param2 = parameters["cameras"][479+VIDEO2_NUM]
+K_left = np.array(param1["K"])
+R_left, T_left = np.array(param1["R"]), np.array(param1["t"])
+K_right = np.array(param2["K"])
+R_right, T_right = np.array(param2["R"]), np.array(param2["t"])
+# キャリブレーションファイルクローズ
+calibration_file.close()
+
+# K_left = np.array([[4437.04178, 0, 2165.73130], [0, 4515.94693, 2783.42064], [0, 0, 1]])
+# K_right = np.array([[4437.04178, 0, 2165.73130], [0, 4515.94693, 2783.42064], [0, 0, 1]])
+# R_right = np.array([[0.5, 0, -(np.sqrt(3))/2.0],
+#               [0, 1, 0],
+#               [np.sqrt(3)/2.0, 0, 0.5]])
+# t_right = np.array([[np.sqrt(3)/2.0*1500], [0], [0.5*1500]]) 
 
 def plot_3Dskeleton(landmarks, connections, save_path):
     fig = plt.figure(figsize = (8, 8))
@@ -56,6 +87,120 @@ def plot_3Dskeleton(landmarks, connections, save_path):
     plt.close()
 
     return fig, ax
+
+def plot_2Dskeleton(left_landmarks, right_landmarks, connection, frame_num, save_path):
+    left_x = []
+    left_y = []
+    right_x = []
+    right_y = []
+    
+    # 左画像の2Dランドマーク
+    for i, landmark in enumerate(left_landmarks.landmark):
+        left_x.append(landmark.x)
+        left_y.append(landmark.y)
+    
+    # 右画像の2Dランドマーク
+    for i, landmark in enumerate(right_landmarks.landmark):
+        right_x.append(landmark.x)
+        right_y.append(landmark.y)
+         
+    # キーポイントを描画
+    fig, (axL, axR) = plt.subplots(ncols=2, figsize=(10, 4))
+
+    # 左画像2Dプロット
+    axL.scatter(left_x, left_y, linewidth=2)
+    axL.set_title('left pose')
+    axL.set_xlabel('x')
+    axL.set_ylabel('y')
+    axL.set_xlim(0, 1)
+    axL.set_ylim(0, 1)
+    axL.grid(True)
+    axL.invert_yaxis()  # Y軸を反転
+    # ボーンを描画
+    for start_idx, end_idx in connection:
+        axL.plot([left_x[start_idx], left_x[end_idx]],
+                 [left_y[start_idx], left_y[end_idx]],
+                 color='blue')
+
+    # 右画像2Dプロット
+    axR.scatter(right_x, right_y, c='red')
+    axR.set_title('right pose')
+    axR.set_xlabel('x')
+    axR.set_ylabel('y')
+    axR.set_xlim(0, 1)
+    axR.set_ylim(0, 1)    
+    axR.grid(True)
+    axR.invert_yaxis()  # Y軸を反転
+    # ボーンを描画
+    for start_idx, end_idx in connection:
+        axR.plot([right_x[start_idx], right_x[end_idx]],
+                 [right_y[start_idx], right_y[end_idx]],
+                 color='blue')
+
+    plt.tight_layout()  # レイアウトを調整
+
+    # 画像として保存
+    if save_path:
+        plt.savefig(save_path+"2dpose_"+str(frame_num).zfill(4)+".jpg")  # 解像度300dpiで保存
+    plt.show()
+    plt.close()
+
+def plot_2Dskeleton_screen_coord(left_landmarks, right_landmarks, connection, frame_num, save_path):
+    left_x = []
+    left_y = []
+    right_x = []
+    right_y = []
+    
+    # 左画像の2Dランドマーク
+    for i, landmark in enumerate(left_landmarks):
+        left_x.append(landmark[0])
+        left_y.append(landmark[1])
+    
+    # 右画像の2Dランドマーク
+    for i, landmark in enumerate(right_landmarks):
+        right_x.append(landmark[0])
+        right_y.append(landmark[1])
+         
+    # キーポイントを描画
+    fig, (axL, axR) = plt.subplots(ncols=2, figsize=(10, 4))
+
+    # 左画像2Dプロット
+    axL.scatter(left_x, left_y, linewidth=2)
+    axL.set_title('left pose image coord')
+    axL.set_xlabel('x')
+    axL.set_ylabel('y')
+    axL.set_xlim(0, WIDTH)
+    axL.set_ylim(0, HEIGHT)
+    axL.grid(True)
+    axL.invert_yaxis()  # Y軸を反転
+    # ボーンを描画
+    for start_idx, end_idx in connection:
+        axL.plot([left_x[start_idx], left_x[end_idx]],
+                 [left_y[start_idx], left_y[end_idx]],
+                 color='blue')
+
+    # 右画像2Dプロット
+    axR.scatter(right_x, right_y, c='red')
+    axR.set_title('right pose image coord')
+    axR.set_xlabel('x')
+    axR.set_ylabel('y')
+    axR.set_xlim(0, WIDTH)
+    axR.set_ylim(0, HEIGHT)    
+    axR.grid(True)
+    axR.invert_yaxis()  # Y軸を反転
+    # ボーンを描画
+    for start_idx, end_idx in connection:
+        axR.plot([right_x[start_idx], right_x[end_idx]],
+                 [right_y[start_idx], right_y[end_idx]],
+                 color='blue')
+
+    plt.tight_layout()  # レイアウトを調整
+
+    # 画像として保存
+    if save_path:
+        plt.savefig(save_path+"2dpose_"+str(frame_num).zfill(4)+"imgcoord.jpg")  # 解像度300dpiで保存
+    plt.show()
+    plt.close()
 
 def annotate_image(image_L, landmarks_L, image_R, landmarks_R, connections, jointstyle, bonestyle):
     """
@@ -139,15 +284,15 @@ def create_video_from_images(image_list, frame_rate, save_path):
 # 処理関数
 def Landmark_detect(image_left, image_right):
     """
-    左右画像それぞれの対象の手、顔、全身の3Dポーズを推定する
+    左右画像それぞれの対象の手、顔、全身の2Dポーズを推定する
 
     Parameters:
     image_left (MatLike)        : 左カメラの画像
     image_right (MatLike)       : 右カメラの画像
 
     Returns:
-    result_left (MediaPipe独自クラス)   : 左画像の3Dポーズ
-    result_right (MediaPipe独自クラス)  : 右画像の3Dポーズ
+    result_left (MediaPipe独自クラス)   : 左画像の2Dポーズ
+    result_right (MediaPipe独自クラス)  : 右画像の2Dポーズ
     """
     # RGBスケールに変換
     image_leftRGB = cv2.cvtColor(image_left, cv2.COLOR_BGR2RGB)
@@ -162,34 +307,37 @@ def Landmark_detect(image_left, image_right):
 
 def Normalized_to_screen_coord(result_L, result_R, width, height):
     """
-    左右画像で推定したランドマークを画像座標系（スクリーン座標系）の値に変換する
+    左右画像で推定したランドマークの2D情報を画像座標系の値に変換する
 
     Parameters:
-    result (NamedTuple)   : 推定したランドマークのリスト。.landmark.x各ランドマークのx座標の値を取り出せる
+    result_L (NamedTuple)   : 推定した左画像のランドマーク
+    result_R (NamedTuple)   : 推定した右画像のランドマーク
     width (int)           : 画像の幅
     height (int)          : 画像の高さ
 
     Returns:
-    scr_landmarks (numpy.ndarray)   : n行2列の画像座標系ランドマーク (全身なのでn=33)
+    scr_landmarks_L (numpy.ndarray)   : 左画像の画像座標系2Dランドマーク
+    scr_landmarks_R (numpy.ndarray)   : 右画像の画像座標系2Dランドマーク
     """
-    scr_list_L = [] # カメラ座標を記録する配列を生成
-    scr_list_R = []
-    # 左側画像のランドマークを変換
+    scr_list_L = [] # 左画像のランドマークを記録するリスト
+    scr_list_R = [] # 右画像のランドマークを記録するリスト
+    # 左画像のランドマークを変換
     for index, landmark in enumerate(result_L.landmark):
-        # キーポイントの値をカメラ座標系（画像中央が原点）に変換
+        # ランドマークの2D情報を画像座標系に変換
         scr_x = landmark.x * width
         scr_y = landmark.y * height
         # リストに挿入
         scr_list_L.append([scr_x, scr_y]) 
 
-    # 右側画像のランドマークを変換
+    # 右画像のランドマークを変換
     for index, landmark in enumerate(result_R.landmark):
-        # キーポイントの値をカメラ座標系（画像中央が原点）に変換
+        # ランドマークの2D情報を画像座標系に変換
         scr_x = landmark.x * width
         scr_y = landmark.y * height
         # リストに挿入
         scr_list_R.append([scr_x, scr_y]) 
     
+    # NDArray型に変換
     scr_landmarks_L = np.array(scr_list_L)
     scr_landmarks_R = np.array(scr_list_R)
 
@@ -225,17 +373,16 @@ def Projection_mat_calc(K_left, R_left, T_left, K_right, R_right, T_right):
     左右カメラの投影行列を生成する
 
     Parameters:
-    K (numpy.ndarray)       : 3行3列のカメラパラメータ
-    R (numpy.ndarray)       : 3行3列の回転行列
-    t (numpy.ndarray)       : 3行1列の並進ベクトル
+    K_left, K_right (numpy.ndarray)       : 3行3列の左右内部パラメータ行列
+    R_left, R_right (numpy.ndarray)       : 3行3列の左右回転行列
+    t_left, t_right (numpy.ndarray)       : 3行1列の左右並進ベクトル
 
     Returns:
-    Pleft (numpy.ndarray)   : 左画像のカメラ投影行列 (3*4)
-    Pright (numpy.ndarray)  : 右画像のカメラ投影行列 (3*4)
+    Pleft (numpy.ndarray)   : 3行4列の左透視投影行列
+    Pright (numpy.ndarray)  : 3行4列の右透視投影行列
     """
     
-    
-    # 左カメラをワールド座標とするため、左投影行列 P_left = K[I|0] = [K|0]　となる
+    # 左右投影行列の計算
     Pleft = np.hstack((K_left @ R_left, K_left @ T_left))
     Pright = np.hstack((K_right @ R_right, K_right @ T_right))
 
@@ -246,14 +393,13 @@ def Triangulate_3Dpoint(Pleft, Pright, landmark_left, landmark_right):
     カメラの投影行列を使用して特徴点の3D位置を再構築する
 
     Parameters:
-    Pleft (numpy.ndarray)           : 左画像のカメラ投影行列 (3*4)
-    Pright (numpy.ndarray)          : 右画像のカメラ投影行列 (3*4)
-    landmark_left (numpy.ndarray)   : n行2列の左画像のランドマーク（画像座標系）
-    landmark_right (numpy.ndarray)  : n行2列右画像のランドマーク（画像座標系）(全身なのでn=33)
-    matches (list of int)           : 画像間で対応するランドマークの有無を示すリスト
+    Pleft (numpy.ndarray)           : 3行4列の左透視投影行列
+    Pright (numpy.ndarray)          : 3行4列の右透視投影行列 
+    landmark_left (numpy.ndarray)   : 左画像の画像座標系2Dランドマーク
+    landmark_right (numpy.ndarray)  : 右画像の画像座標系2Dランドマーク
 
     Returns:
-    points3D (numpy.ndarray)        : 再構築されたn行3列の3Dポイントの配列
+    points3D (numpy.ndarray)        : 復元された3Dランドマーク
     """
     # マッチングされた特徴点を取得
     # left_list = []
@@ -281,6 +427,20 @@ def Triangulate_3Dpoint(Pleft, Pright, landmark_left, landmark_right):
     return points3D.T
 
 def Triangulate3DHPE(img1, img2, K_l, R_l, T_l, K_r, R_r, T_r):
+    """
+    左右カメラの投影行列を生成する
+
+    Parameters:
+    img1 (MatLike)                 : 左画像
+    img2 (MatLike)                 : 右画像
+    K_l, K_r (numpy.ndarray)       : 3行3列の左右内部パラメータ行列
+    R_l, R_r (numpy.ndarray)       : 3行3列の左右回転行列
+    t_l, t_r (numpy.ndarray)       : 3行1列の左右並進ベクトル
+
+    Returns:
+    landmark3D (numpy.ndarray)     : 復元された3Dランドマーク
+    """
+
     # 高さ、幅（同じカメラを用いるため片方の画像から取得）
     HEIGHT, WIDTH, _ = img1.shape
 
@@ -289,187 +449,92 @@ def Triangulate3DHPE(img1, img2, K_l, R_l, T_l, K_r, R_r, T_r):
     
     # 画像座標系への変換(同時に体のランドマークのみ使用)
     pose_left, pose_right = Normalized_to_screen_coord(result_left.pose_landmarks, result_right.pose_landmarks, WIDTH, HEIGHT)
-    print("left=","\n",pose_left)
-    print("right=","\n",pose_right)
 
     # 投影行列を計算
     Pleft, Pright = Projection_mat_calc(K_l, R_l, T_l, K_r, R_r, T_r)
 
     # 3次元位置を復元
     landmark3D = Triangulate_3Dpoint(Pleft, Pright, pose_left, pose_right)
-    print("landmark3D:","\n",landmark3D)
 
-    return result_left, result_right, landmark3D
+    return landmark3D
 
-gt_num = 137 # 正解データが137フレーム以前が無い
-gt_body_list = []
-while True:
-    if gt_num > 9056:
-        break
-    with open(GROUND_TRUTH_FOLDER_PATH+"body3DScene_"+str(gt_num).zfill(8)+".json") as gt:
-        ground_truth_file = gt
+frame_num = 4537
+print("frame "+str(frame_num)) # 指定フレーム数を表示
 
-        gt_frame = json.load(ground_truth_file)
-        print(not(gt_frame is None))
-    if len(gt_frame['bodies']) == 0:
-        gt_body = np.zeros((19, 4))
+# 正解データ呼び出し
+with open(GROUND_TRUTH_FOLDER_PATH+"body3DScene_"+str(frame_num).zfill(8)+".json") as gt:
+    ground_truth_file = gt
+    # jsonファイルをロード
+    gt_frame = json.load(ground_truth_file)
+    print(not(gt_frame is None))
+# 正解3Dランドマーク情報取り出し
+if len(gt_frame['bodies']) == 0:
+    gt_body = np.zeros((19, 4))
+else:
+    # (x,y,z,c)の19行4列の配列を作成
+    gt_body = np.array(gt_frame['bodies'][0]['joints19']).reshape(-1, 4)
+
+# 3Dランドマーク推定
+# キャプチャー処理
+VIDEO1.set(cv2.CAP_PROP_POS_FRAMES, frame_num-1)
+VIDEO2.set(cv2.CAP_PROP_POS_FRAMES, frame_num-1)
+print("now frame:"+str(VIDEO1.get(cv2.CAP_PROP_POS_FRAMES)))
+# ビデオキャプチャー
+ret1, img1 = VIDEO1.read()
+ret2, img2 = VIDEO2.read()
+print("now frame:"+str(VIDEO1.get(cv2.CAP_PROP_POS_FRAMES)))
+if not (ret1 and ret2):
+    print("breaked frame:", frame_num)
+    sys.exit()
+
+# 三角測量を用いた3Dポーズ推定(HPE)
+# 高さ、幅（同じカメラを用いるため片方の画像から取得）
+HEIGHT, WIDTH, _ = img1.shape   
+result_left, result_right = Landmark_detect(image_left=img1, image_right=img2)
+if (result_left.pose_landmarks is None) or (result_right.pose_landmarks is None):
+    landmark3D = np.zeros((33, 3))
+    print("no pose")
+else:
+    # 画像座標系への変換(体のランドマークのみ使用)
+    pose_left, pose_right = Normalized_to_screen_coord(result_left.pose_landmarks, result_right.pose_landmarks, WIDTH, HEIGHT)
+    # 投影行列を計算
+    Pleft, Pright = Projection_mat_calc(K_left, R_left, T_left, K_right, R_right, T_right)
+    # 3次元位置を復元
+    landmark3D = Triangulate_3Dpoint(Pleft, Pright, pose_left, pose_right)
+
+# 3Dプロット生成
+fig = plt.figure(figsize = (8, 8))
+ax= fig.add_subplot(111, projection='3d')
+# ランドマークをプロットに描写
+for landmarkGT in gt_body:
+    if landmarkGT[3] != -1.0: # 信憑性のないデータを省く(c=-1となっているデータを弾く)
+        ax.scatter(landmarkGT[0], landmarkGT[1],landmarkGT[2], s = 1, c = "blue") # 正解データ 青色
     else:
-        gt_body = np.array(gt_frame['bodies'][0]['joints19']).reshape(-1, 4)
+        print("through:",landmarkGT)
+ax.scatter(landmark3D[:, 0], landmark3D[:,1],landmark3D[:,2], s = 1, c = "red") # MediaPipe　赤色
+set_equal_aspect(ax)
+# 骨格情報からボーンを形成
+for connection in body_edges: # 正解データ
+    start_joint, end_joint = connection
+    x = [gt_body[start_joint, 0], gt_body[end_joint, 0]]
+    y = [gt_body[start_joint, 1], gt_body[end_joint, 1]]
+    z = [gt_body[start_joint, 2], gt_body[end_joint, 2]]
+    plt.plot(x, y, z, c='blue', linewidth=1)
 
-    gt_body_list.append(gt_body)
-    fig_gt, ax_gt = plot_3Dskeleton(gt_body, body_edges, TEMPORARY_IMAGES_STORAGE_PATH)
-
-    # plot3D = cv2.imread(TEMPORARY_IMAGES_STORAGE_PATH+"3dplot.jpg")
-    # # cv2.imshow("plot3d",plot3D)
-    # # cv2.waitKey(0)
-    # cv2.imwrite(GROUND_TRUTH_SAVE_FOLDER_PATH+"gt_frame_"+str(gt_num).zfill(4)+".jpg", plot3D)
-
-    gt_num += 100
-
-# 使用ビデオ番号 18と23は動画を通して体が見切れず、両手両足が大きく隠れることもなかったため（片手片足が大きく隠れるのは少しあり）
-VIDEO1_NUM = 18
-VIDEO2_NUM = 23
-# 3dプロット保存パス
-USING_VIDEO = str(VIDEO1_NUM).zfill(2)+"&"+str(VIDEO2_NUM).zfill(2)
-PLOT_3D_SAVE_PATH = "./mp_data_"+DATASET_NAME+"/"+USING_VIDEO+"/"
-# キャリブレーションファイル呼び出し
-calibration_file = open("./panoptic-toolbox/"+DATASET_NAME+"/calibration_"+DATASET_NAME+".json")
-parameters = json.load(calibration_file)
-print("cam_params:", not(parameters is None))
-# 入力動画
-VIDEO1 = cv2.VideoCapture("./panoptic-toolbox/"+DATASET_NAME+"/hdVideos/hd_00_"+str(VIDEO1_NUM).zfill(2)+".mp4")
-VIDEO2 = cv2.VideoCapture("./panoptic-toolbox/"+DATASET_NAME+"/hdVideos/hd_00_"+str(VIDEO2_NUM).zfill(2)+".mp4")
-# 内部パラメータ、外部パラメータ
-param1 = parameters["cameras"][479+VIDEO1_NUM] # HDカメラ00_00 [479]
-param2 = parameters["cameras"][479+VIDEO2_NUM]
-K_left = np.array(param1["K"])
-R_left, T_left = np.array(param1["R"]), np.array(param1["t"])
-K_right = np.array(param2["K"])
-R_right, T_right = np.array(param2["R"]), np.array(param2["t"])
-# キャリブレーションファイルクローズ
-calibration_file.close()
-
-mp_landmark_list = []
-# キャプチャーするフレーム間隔
-capture_rate = 100
-frame_num = 0
-for i in range(37): # 正解データとフレームを合わせる
-    # ビデオキャプチャー
-    ret1, img1 = VIDEO1.read()
-    ret2, img2 = VIDEO2.read()
-    frame_num += 1
-
-while True:
-    print("frame "+str(frame_num)) # 現在のキャプチャフレーム数を表示
-    
-    # キャプチャー処理
-    for i in range(capture_rate): # capture_rateフレームごとにキャプチャ
-        # ビデオキャプチャー
-        ret1, img1 = VIDEO1.read()
-        ret2, img2 = VIDEO2.read()
-        frame_num += 1
-    if not (ret1 and ret2):
-        print("breaked frame:", frame_num)
-        break
-    
-    # 三角測量を用いた3Dポーズ推定(HPE)
-    # 高さ、幅（同じカメラを用いるため片方の画像から取得）
-    HEIGHT, WIDTH, _ = img1.shape   
-    result_left, result_right = Landmark_detect(image_left=img1, image_right=img2)
-    if (result_left.pose_landmarks is None) or (result_right.pose_landmarks is None):
-        landmark3D = np.zeros((33, 3))
-        print("no pose")
-    else:
-        # 画像座標系への変換(同時に体のランドマークのみ使用)
-        pose_left, pose_right = Normalized_to_screen_coord(result_left.pose_landmarks, result_right.pose_landmarks, WIDTH, HEIGHT)
-        # 投影行列を計算
-        Pleft, Pright = Projection_mat_calc(K_left, R_left, T_left, K_right, R_right, T_right)
-        # 3次元位置を復元
-        landmark3D = Triangulate_3Dpoint(Pleft, Pright, pose_left, pose_right)
-    
-    mp_landmark_list.append(landmark3D)
-    # _, _ = plot_3Dskeleton(landmark3D, POSE_CONNECTIONS, TEMPORARY_IMAGES_STORAGE_PATH)
-
-    # plot3D = cv2.imread(TEMPORARY_IMAGES_STORAGE_PATH+"3dplot.jpg")
-    # # cv2.imshow("plot3d",plot3D)
-    # # cv2.waitKey(0)
-    # if not os.path.isdir(PLOT_3D_SAVE_PATH+"3Dplot/"): # 指定したフォルダがなければ作成
-    #     os.makedirs(PLOT_3D_SAVE_PATH+"3Dplot/")
-    # cv2.imwrite(PLOT_3D_SAVE_PATH+"3Dplot/mp_frame_"+str(frame_num).zfill(4)+".jpg", plot3D)
-
-# 2Dでの比較
-# gt_data_list = sorted(glob.glob(GROUND_TRUTH_SAVE_FOLDER_PATH+"*.jpg"))
-# mp_data_list = sorted(glob.glob(PLOT_3D_SAVE_PATH+"3Dplot/*.jpg"))
-
-# loop_times = min(len(gt_body_list), len(mp_landmark_list))
-
-# evaluation = [0, 0, 0]
-
-# 2D比較
-# for i in range(loop_times):
-#     gt_data = cv2.imread(mp_data_list[i])
-#     mp_data = cv2.imread(gt_data_list[i])
-#     concatenation_image = cv2.hconcat([mp_data, gt_data])
-#     cv2.imshow("3Dplot [mediapipe, groud truth]", concatenation_image)
-#     key = cv2.waitKey(0)
-#     if key == ord('a'): # 全身がそれっぽい姿勢の時 (bでもcでもない)
-#         evaluation[0] += 1
-#     elif key == ord('b'): # 手足が取れていない
-#         evaluation[1] += 1
-#     elif key == ord('c'): # 推定できていない
-#         evaluation[2] += 1
-#     print(evaluation)
-#     cv2.destroyAllWindows()
-
-# # テスト用
-# gt_body_list = [[0, 0, 0],[3, 5, 2], [2, -4, 5], [-3, -4, 1]]
-# gt_body_connection = [[]]
-# gt_body_list = [[0, 0, 0],[3, 5, 2], [2, -4, 5], [-3, -4, 1]]
-
-# 3D比較
-loop_times = min(len(gt_body_list), len(mp_landmark_list))
-frame_num = 137
-for i in range(loop_times):
-    gt_data = gt_body_list[i]
-    mp_data = mp_landmark_list[i]
-    # 3Dプロット生成
-    fig = plt.figure(figsize = (8, 8))
-    ax= fig.add_subplot(111, projection='3d')
-    # ランドマークをプロットに描写
-    for gt_landmark in gt_data:
-        if gt_landmark[3] != -1.0:
-            ax.scatter(gt_landmark[0], gt_landmark[1],gt_landmark[2], s = 1, c = "blue") # 正解データ
-        else:
-            print("through:",gt_landmark)
-    ax.scatter(mp_data[:, 0], mp_data[:,1],mp_data[:,2], s = 1, c = "red") # MediaPipe
-    set_equal_aspect(ax)
-    # 骨格情報からボーンを形成
-    for connection in body_edges: # 正解データ
-        start_joint, end_joint = connection
-        x = [gt_data[start_joint, 0], gt_data[end_joint, 0]]
-        y = [gt_data[start_joint, 1], gt_data[end_joint, 1]]
-        z = [gt_data[start_joint, 2], gt_data[end_joint, 2]]
-        plt.plot(x, y, z, c='blue', linewidth=1)
-    
-    for connection in POSE_CONNECTIONS: # MediaPipe
-        start_joint, end_joint = connection
-        x = [mp_data[start_joint, 0], mp_data[end_joint, 0]]
-        y = [mp_data[start_joint, 1], mp_data[end_joint, 1]]
-        z = [mp_data[start_joint, 2], mp_data[end_joint, 2]]
-        plt.plot(x, y, z, c='red', linewidth=1)
-            
-    ax.set_xlabel("X")
-    ax.set_ylabel("Y")
-    ax.set_zlabel("Z")
-    plt.title("frame_"+str(frame_num).zfill(4))
-    # 対象を正面から大体hd_00カメラの位置から開始
-    ax.view_init(elev=180, azim=5, roll=-90)
-    plt.show()
-    frame_num += 100
-
-plt.close()
-
-cv2.destroyAllWindows()
+for connection in POSE_CONNECTIONS: # MediaPipe
+    start_joint, end_joint = connection
+    x = [landmark3D[start_joint, 0], landmark3D[end_joint, 0]]
+    y = [landmark3D[start_joint, 1], landmark3D[end_joint, 1]]
+    z = [landmark3D[start_joint, 2], landmark3D[end_joint, 2]]
+    plt.plot(x, y, z, c='red', linewidth=1)
+        
+ax.set_xlabel("X")
+ax.set_ylabel("Y")
+ax.set_zlabel("Z")
+plt.title("frame_"+str(frame_num).zfill(4))
+# 対象を正面から大体hd_00カメラの位置から開始
+ax.view_init(elev=180, azim=5, roll=-90)
+plt.show()
 
 
 
