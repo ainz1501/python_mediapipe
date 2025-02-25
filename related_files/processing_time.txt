@@ -1,0 +1,35 @@
+entire ave: 0.18704408784175203
+Landmark_detect ave: 0.1869036210091075
+Normalized_to_screen_coord ave: 0.00004853
+Projection_mat_calc ave: 0.00003753
+Triangulate_3Dpoint ave: 0.00005136
+entire culc: 0.18704104716778688
+Landmark_detect left-image ave: 0.1869036210091075
+Landmark_detect right-image ave: 0.1869036210091075
+Landmark_detect per: 99.925 %
+Normalized_to_screen_coord per: 0.026 %
+Projection_mat_calc per: 0.020 %
+Triangulate_3Dpoint per: 0.027 %
+entire fps: 5.3463
+
+# 10000回各処理をループ
+test_times = 10000
+entire: 1742.9465290000662
+Landmark_detect: 1724.0462261666544
+Normalized_to_screen_coord: 0.35409749997779727
+Projection_mat_calc: 0.0837249169126153
+Triangulate_3Dpoint: 0.44692683406174183
+entire culc: 1724.9309754176065
+
+Landmark_detect left-image: 1347.4858976248652
+Landmark_detect right-image: 1353.7769088330679
+Landmark_detect both-image: 1719.5174636659212
+
+print times: 0.018148915842175484
+
+Landmark_detect per: 98.916 %
+Normalized_to_screen_coord per: 0.020 %
+Projection_mat_calc per: 0.005 %
+Triangulate_3Dpoint per: 0.026 %
+
+entire fps: 5.7374
