@@ -24,6 +24,7 @@ FIRST_FRAME_NUM = 137 # データセットに含まれるランドマークデ�
 # 使用データ指定
 DATASET_NAME = "171204_pose3"
 GT_DATA_FOLDER_PATH = "./panoptic-toolbox/"+DATASET_NAME+"/hdPose3d_stage1_coco19/"
+GT_HAND_DATA_FOLDER_PATH = "./panoptic-toolbox/"+DATASET_NAME+"/hdHand3d/"
 VIDEO1_NUM = 18
 VIDEO2_NUM = 23
 END_FRAME_NUM = 9056
@@ -50,6 +51,12 @@ OUTPUT_LANDMARKS_PATH = "outputs/output_landmarks/"+DATASET_NAME+"_cam"+str(VIDE
 # ボーン情報
 POSE_CONNECTIONS = mp_pose.POSE_CONNECTIONS
 GT_POSE_CONNECTIONS = np.array([[1,2],[1,4],[4,5],[5,6],[1,3],[3,7],[7,8],[8,9],[3,13],[13,14],[14,15],[1,10],[10,11],[11,12]])-1
+GT_HAND_CONNECTIONS = np.array([[1,2],[2,3],[3,4],[4,5],
+                                [1,6],[6,7],[7,8],[8,9],
+                                [1,10],[10,11],[11,12],[12,13],
+                                [1,14],[14,15],[15,16],[16,17],
+                                [1,18],[18,19],[19,20],[20,21]])-1
+
 # レンダリング情報
 JOINT_STYLE = mp_drawing.DrawingSpec(color=(255,0,0), thickness=5, circle_radius=3)
 BONE_STYLE = mp_drawing.DrawingSpec(color=(200,200,0), thickness=5)
@@ -106,7 +113,7 @@ def plot_2Dskeleton(landmarks, connection):
     fig.savefig()
     plt.show()
 
-def plot_3Dskeleton(output_landmarks, gt_landmarks, output_connections, gt_connections):
+def plot_3Dskeleton(output_landmarks, gt_landmarks, gt_left, gt_right, output_connections, gt_connections, gt_hand_connections):
     fig = plt.figure(figsize = (8, 8))
     ax= fig.add_subplot(111, projection='3d')
     
@@ -119,15 +126,30 @@ def plot_3Dskeleton(output_landmarks, gt_landmarks, output_connections, gt_conne
         z = [output_landmarks[start_joint, 2], output_landmarks[end_joint, 2]]
         ax.plot(x, y, z, c='red', linewidth=2)
 
-     # グラウンドトゥルースをプロットに表示
-    ax.scatter(gt_landmarks[:, 0], gt_landmarks[:,1],gt_landmarks[:,2], s = 10, c = "blue")
+    # グラウンドトゥルースをプロットに表示
+    ax.scatter(gt_landmarks[:, 0], gt_landmarks[:,1],gt_landmarks[:,2], s = 10, c = "blue") # ボディ
     for connection in gt_connections:
         start_joint, end_joint = connection
         x = [gt_landmarks[start_joint, 0], gt_landmarks[end_joint, 0]]
         y = [gt_landmarks[start_joint, 1], gt_landmarks[end_joint, 1]]
         z = [gt_landmarks[start_joint, 2], gt_landmarks[end_joint, 2]]
         ax.plot(x, y, z, c='blue', linewidth=2)
+    ax.scatter(gt_left[:, 0], gt_left[:,1],gt_left[:,2], s = 10, c = "blue") # 左手
+    for connection in gt_hand_connections:
+        start_joint, end_joint = connection
+        x = [gt_left[start_joint, 0], gt_left[end_joint, 0]]
+        y = [gt_left[start_joint, 1], gt_left[end_joint, 1]]
+        z = [gt_left[start_joint, 2], gt_left[end_joint, 2]]
+        ax.plot(x, y, z, c='blue', linewidth=2)
+    ax.scatter(gt_right[:, 0], gt_right[:,1],gt_right[:,2], s = 10, c = "blue") # 右手
+    for connection in gt_hand_connections:
+        start_joint, end_joint = connection
+        x = [gt_right[start_joint, 0], gt_right[end_joint, 0]]
+        y = [gt_right[start_joint, 1], gt_right[end_joint, 1]]
+        z = [gt_right[start_joint, 2], gt_right[end_joint, 2]]
+        ax.plot(x, y, z, c='blue', linewidth=2)
 
+        # if not (gt_right[start_joint] == [0,0,0] or gt_right[end_joint] == [0,0,0]): # [0,0,0]をプロットから省く
     set_equal_aspect(ax)
     ax.set_xlabel("X")
     ax.set_ylabel("Y")
@@ -199,7 +221,7 @@ def create_video_from_images(concatenation_left, concatenation_right, frame_rate
 frame_num = FIRST_FRAME_NUM
 while frame_num < END_FRAME_NUM:
     # 正解データ呼び出し
-    with open(GT_DATA_FOLDER_PATH+"body3DScene_"+str(frame_num).zfill(8)+".json") as gt:
+    with open(GT_DATA_FOLDER_PATH+"body3DScene_"+str(frame_num).zfill(8)+".json") as gt: # ボディ
         ground_truth_file = gt
         gt_frame = json.load(ground_truth_file)
         print(not(gt_frame is None))
@@ -208,6 +230,24 @@ while frame_num < END_FRAME_NUM:
         gt_body = np.zeros((19, 4))
     else:
         gt_body = np.array(gt_frame['bodies'][0]['joints19']).reshape(-1, 4)
+    with open(GT_HAND_DATA_FOLDER_PATH+"handRecon3D_hd"+str(frame_num).zfill(8)+".json") as gt: # 両手
+        ground_truth_file = gt
+        gt_frame = json.load(ground_truth_file)
+        print(not(gt_frame is None))
+    # (x,y,z)の21行3列の配列を作成 'landmarks'の長さが63であり、手のランドマークは21個であることから想定
+    if len(gt_frame['people']) == 0:
+        gt_left = np.zeros((21, 3))
+        gt_right = np.zeros((21, 3))
+    else:
+        if not(len(gt_frame['people'][0]['left_hand']) == 0):
+            gt_left = np.array(gt_frame['people'][0]['left_hand']['landmarks']).reshape(-1, 3)
+        else:
+            gt_left = np.zeros((21,3))
+        if not(len(gt_frame['people'][0]['right_hand']) == 0):
+            gt_right = np.array(gt_frame['people'][0]['right_hand']['landmarks']).reshape(-1, 3)
+        else:
+            gt_right = np.zeros((21,3))
+       
 
     # 推定データ呼び出し
     with open(OUTPUT_LANDMARKS_PATH+"frame_"+str(frame_num).zfill(8)+".json") as out:
@@ -221,7 +261,7 @@ while frame_num < END_FRAME_NUM:
     
     # 画像、プロット表示
     concat_image = concatenate_images(frame_num) # 比較しやすいように入力画像を連結
-    plot_3Dskeleton(out_body, gt_body, POSE_CONNECTIONS, GT_POSE_CONNECTIONS)
+    plot_3Dskeleton(out_body, gt_body, gt_left, gt_right, POSE_CONNECTIONS, GT_POSE_CONNECTIONS, GT_HAND_CONNECTIONS)
     cv2.imshow("frame"+str(frame_num).zfill(8), concat_image) 
     plt.show()
     cv2.destroyAllWindows() 
