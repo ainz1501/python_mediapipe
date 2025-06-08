@@ -18,11 +18,17 @@ mp_pose = mp.solutions.pose
 CAPTURE_RATE = 100  
 FIRST_FRAME_NUM = 137 # データセットに含まれるランドマークデータが137フレーム目以降からファイルが存在するため
 
-# 使用データ指定
+# 使用データセットの名称や番号、フォルダのパスなど
 DATASET_NAME = "171204_pose3"
 VIDEO1_NUM = 18
 VIDEO2_NUM = 23
-GT_DATA_FOLDER_PATH = "./panoptic-toolbox/171204_pose3/hdPose3d_stage1_coco19"
+GT_DATA_FOLDER_PATH = "./panoptic-toolbox/171204_pose3/hdPose3d_stage1_coco19/"
+END_FRAME_NUM = 9056
+TEMPORARY_IMAGES_STORAGE_PATH = "./output_images/images_temporary_storage/" # 一時的に画像を保存するフォルダのパス
+INPUT1_IMAGE_PATH = "./inputs/input_images/"+DATASET_NAME+"_cam"+str(VIDEO1_NUM).zfill(2)+"/"
+INPUT2_IMAGE_PATH = "./inputs/input_images/"+DATASET_NAME+"_cam"+str(VIDEO2_NUM).zfill(2)+"/"
+VIDEO_STORAGE_PATH = ".outputs/output_videos/"+DATASET_NAME+"_hdvideo"+str(VIDEO1_NUM).zfill(2)+str(VIDEO2_NUM).zfill(2)+"/"
+OUTPUT_LANDMARKS_PATH = "outputs/output_landmarks/"+DATASET_NAME+"_cam"+str(VIDEO1_NUM).zfill(2)+str(VIDEO2_NUM).zfill(2)+"/"
 
 # 入力動画
 VIDEO1 = cv2.VideoCapture("./panoptic-toolbox/"+DATASET_NAME+"/hdVideos/hd_00_"+str(VIDEO1_NUM).zfill(2)+".mp4")
@@ -39,12 +45,6 @@ R_left, T_left = np.array(param1["R"]), np.array(param1["t"])
 K_right = np.array(param2["K"])
 R_right, T_right = np.array(param2["R"]), np.array(param2["t"])
 
-# パスまとめ
-TEMPORARY_IMAGES_STORAGE_PATH = "./output_images/images_temporary_storage/" # 一時的に画像を保存するフォルダのパス
-INPUT1_IMAGE_PATH = "./inputs/input_images/"+DATASET_NAME+"_cam"+str(VIDEO1_NUM).zfill(2)+"/"
-INPUT2_IMAGE_PATH = "./inputs/input_images/"+DATASET_NAME+"_cam"+str(VIDEO2_NUM).zfill(2)+"/"
-VIDEO_STORAGE_PATH = ".outputs/output_videos/"+DATASET_NAME+"_hdvideo"+str(VIDEO1_NUM).zfill(2)+str(VIDEO2_NUM).zfill(2)+"/"
-OUTPUT_LANDMARKS_PATH = "outputs/output_landmarks/"+DATASET_NAME+"_cam"+str(VIDEO1_NUM).zfill(2)+str(VIDEO2_NUM).zfill(2)+"/"
 # フォルダ作成
 if not os.path.isdir(VIDEO_STORAGE_PATH): # 指定したフォルダがなければ作成
     os.makedirs(VIDEO_STORAGE_PATH)
@@ -406,7 +406,7 @@ frame_num = FIRST_FRAME_NUM
 # else:
 #     gt_body = np.array(gt_frame['bodies'][0]['joints19']).reshape(-1, 4)
 
-while frame_num < 9056: 
+while frame_num < END_FRAME_NUM: 
     # 入力フレーム取得
     VIDEO1.set(cv2.CAP_PROP_POS_FRAMES, frame_num-1)
     VIDEO2.set(cv2.CAP_PROP_POS_FRAMES, frame_num-1)
@@ -438,7 +438,7 @@ while frame_num < 9056:
     result = {'frame':frame_num, 'landmarks':landmark_list}
     with open(OUTPUT_LANDMARKS_PATH+'frame_'+str(frame_num).zfill(8)+'.json', 'w') as f:
         json.dump(result, f, indent=2)
-    frame_num += 100
+    frame_num += CAPTURE_RATE
 
 
 
