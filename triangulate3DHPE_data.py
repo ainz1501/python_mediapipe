@@ -1,3 +1,4 @@
+import sys
 import cv2
 import mediapipe as mp
 import matplotlib.pyplot as plt
@@ -13,20 +14,16 @@ mp_holistic = mp.solutions.holistic
 mp_drawing = mp.solutions.drawing_utils
 mp_pose = mp.solutions.pose
 
-# キャプチャーするフレーム間隔
-capture_rate = 100  
+# キャプチャーするフレーム
+CAPTURE_RATE = 100  
+FIRST_FRAME_NUM = 137 # データセットに含まれるランドマークデータが137フレーム目以降からファイルが存在するため
 
-
-# ボーン情報
-POSE_CONNECTIONS = mp_pose.POSE_CONNECTIONS
-# レンダリング情報
-JOINT_STYLE = mp_drawing.DrawingSpec(color=(255,0,0), thickness=5, circle_radius=3)
-BONE_STYLE = mp_drawing.DrawingSpec(color=(200,200,0), thickness=5)
-mp_drawing._VISIBILITY_THRESHOLD = 0.0 # 画像に表示する際のランドマークの信用度閾値
-# 使用データセット
+# 使用データ指定
 DATASET_NAME = "171204_pose3"
 VIDEO1_NUM = 18
 VIDEO2_NUM = 23
+GT_DATA_FOLDER_PATH = "./panoptic-toolbox/171204_pose3/hdPose3d_stage1_coco19"
+
 # 入力動画
 VIDEO1 = cv2.VideoCapture("./panoptic-toolbox/"+DATASET_NAME+"/hdVideos/hd_00_"+str(VIDEO1_NUM).zfill(2)+".mp4")
 VIDEO2 = cv2.VideoCapture("./panoptic-toolbox/"+DATASET_NAME+"/hdVideos/hd_00_"+str(VIDEO2_NUM).zfill(2)+".mp4")
@@ -42,13 +39,28 @@ R_left, T_left = np.array(param1["R"]), np.array(param1["t"])
 K_right = np.array(param2["K"])
 R_right, T_right = np.array(param2["R"]), np.array(param2["t"])
 
-# 一時的に画像を保存するフォルダのパス
-TEMPORARY_IMAGES_STORAGE_PATH = "./output_images/images_temporary_storage/"
-# 作成した動画を保存するフォルダのパス
-VIDEO_STORAGE_PATH = "./output_videos/"+DATASET_NAME+"_hdvideo_"+str(VIDEO1_NUM).zfill(2)+"&"+str(VIDEO2_NUM).zfill(2)+"/"
+# パスまとめ
+TEMPORARY_IMAGES_STORAGE_PATH = "./output_images/images_temporary_storage/" # 一時的に画像を保存するフォルダのパス
+INPUT1_IMAGE_PATH = "./inputs/input_images/"+DATASET_NAME+"_cam"+str(VIDEO1_NUM).zfill(2)+"/"
+INPUT2_IMAGE_PATH = "./inputs/input_images/"+DATASET_NAME+"_cam"+str(VIDEO2_NUM).zfill(2)+"/"
+VIDEO_STORAGE_PATH = ".outputs/output_videos/"+DATASET_NAME+"_hdvideo"+str(VIDEO1_NUM).zfill(2)+str(VIDEO2_NUM).zfill(2)+"/"
+OUTPUT_LANDMARKS_PATH = "outputs/output_landmarks/"+DATASET_NAME+"_cam"+str(VIDEO1_NUM).zfill(2)+str(VIDEO2_NUM).zfill(2)+"/"
+# フォルダ作成
 if not os.path.isdir(VIDEO_STORAGE_PATH): # 指定したフォルダがなければ作成
     os.makedirs(VIDEO_STORAGE_PATH)
-   
+if not os.path.isdir(INPUT1_IMAGE_PATH): 
+    os.makedirs(INPUT1_IMAGE_PATH)
+if not os.path.isdir(INPUT2_IMAGE_PATH): 
+    os.makedirs(INPUT2_IMAGE_PATH)
+if not os.path.isdir(OUTPUT_LANDMARKS_PATH): 
+    os.makedirs(OUTPUT_LANDMARKS_PATH)
+
+# ボーン情報
+POSE_CONNECTIONS = mp_pose.POSE_CONNECTIONS
+# レンダリング情報
+JOINT_STYLE = mp_drawing.DrawingSpec(color=(255,0,0), thickness=5, circle_radius=3)
+BONE_STYLE = mp_drawing.DrawingSpec(color=(200,200,0), thickness=5)
+mp_drawing._VISIBILITY_THRESHOLD = 0.0 # 画像に表示する際のランドマークの信用度閾値  
 
 """
 Landmark_detect：2Dランドマークの推定
@@ -182,7 +194,7 @@ def Triangulate_3Dpoint(Pleft, Pright, landmark_left, landmark_right):
     matches (list of int)           : 画像間で対応するランドマークの有無を示すリスト
 
     Returns:
-    points3D (numpy.ndarray)        : 再構築されたn行3列の3Dポイントの配列
+    points3D.T (numpy.ndarray)        : 再構築された33行3列の3Dポイントの配列の転置行列
     """
     # マッチングされた特徴点を取得
     # left_list = []
@@ -207,7 +219,7 @@ def Triangulate_3Dpoint(Pleft, Pright, landmark_left, landmark_right):
     #         landmark3D[idx] = points3D.T[i]
     #         i+=1
 
-    return points3D.T
+    return points3D.T 
 
 def Triangulate3DHPE(img1, img2, K_l, R_l, T_l, K_r, R_r, T_r):
     # 高さ、幅（同じカメラを用いるため片方の画像から取得）
@@ -375,58 +387,52 @@ def create_video_from_images(concatenation_left, concatenation_right, frame_rate
         out_Lvideo.write(frames_left[i])
         out_Rvideo.write(frames_right[i])
 
+# メイン処理
+frame_num = FIRST_FRAME_NUM
 
-frame_num = 0
-gt_body_list = []       # GTデータリスト
-concatnate_left = []    # 左カメラの連結画像のリスト
-concatnate_right = []   # 右カメラの連結画像のリスト
-# GTデータの最初フレームに合わせる 
-for i in range(137): # GTデータの最初のフレーム 137
-    # ビデオキャプチャー
+# # 正解データ呼び出し
+# gt_body_list = []       # GTデータリスト
+# with open(GT_DATA_FOLDER_PATH+"body3DScene_"+str(frame_num).zfill(8)+".json") as gt:
+#     ground_truth_file = gt
+#     gt_frame = json.load(ground_truth_file)
+#     print(not(gt_frame is None))
+# # (x,y,z,c)の19行4列の配列を作成
+# if len(gt_frame['bodies']) == 0:
+#     gt_body = np.zeros((19, 4))
+# else:
+#     gt_body = np.array(gt_frame['bodies'][0]['joints19']).reshape(-1, 4)
+
+while frame_num < 9056: 
+    # 入力フレーム取得
+    VIDEO1.set(cv2.CAP_PROP_POS_FRAMES, frame_num-1)
+    VIDEO2.set(cv2.CAP_PROP_POS_FRAMES, frame_num-1)
+    print("now frame:"+str(VIDEO1.get(cv2.CAP_PROP_POS_FRAMES)))
     ret1, img1 = VIDEO1.read()
     ret2, img2 = VIDEO2.read()
-if not (ret1 and ret2):
-    print("breaked frame:", frame_num)
-frame_num += 137
+    print("now frame:"+str(VIDEO1.get(cv2.CAP_PROP_POS_FRAMES)))
+    if not (ret1 and ret2):
+        print("breaked frame:", frame_num)
+        sys.exit()
+    # フレーム保存
+    cv2.imwrite(INPUT1_IMAGE_PATH+"frame"+str(frame_num).zfill(8)+".png", img1)
+    cv2.imwrite(INPUT2_IMAGE_PATH+"frame"+str(frame_num).zfill(8)+".png", img2)
 
-# 比較用画像を生成する処理
-left_landmarks, right_landmarks = Landmark_detect(img1, img2)
-cv2.imshow("left image", img1)
-cv2.waitKey(0)
-list_L = [] # カメラ座標を記録する配列を生成
-# 左側画像のランドマークを変換
-for index, landmark in enumerate(left_landmarks.pose_landmarks.landmark):
-    # キーポイントの値をカメラ座標系（画像中央が原点）に変換
-    x = landmark.x
-    y = landmark.y
-    z = landmark.z
-    # リストに挿入
-    list_L.append([x, y, z]) 
-left_pose_landmarks = np.array(list_L)
-fig = plt.figure(figsize = (8, 8))
-ax= fig.add_subplot(111, projection='3d')
-ax.scatter(left_pose_landmarks[:, 0], left_pose_landmarks[:,1],left_pose_landmarks[:,2], s = 1, c = "blue")
-set_equal_aspect(ax)
-# 骨格情報からボーンを形成
-for connection in POSE_CONNECTIONS:
-    start_joint, end_joint = connection
-    x = [left_pose_landmarks[start_joint, 0], left_pose_landmarks[end_joint, 0]]
-    y = [left_pose_landmarks[start_joint, 1], left_pose_landmarks[end_joint, 1]]
-    z = [left_pose_landmarks[start_joint, 2], left_pose_landmarks[end_joint, 2]]
-    plt.plot(x, y, z, c='red', linewidth=1)
+    # 3Dランドマーク推定
+    _, _, landmarks = Triangulate3DHPE(img1, img2, K_left, R_left, T_left, K_right, R_right, T_right)
 
-ax.set_xlim(0,1)
-ax.set_ylim(0,1)
-ax.set_zlim(-1,1)
-        
-ax.set_xlabel("X")
-ax.set_ylabel("Y")
-ax.set_zlabel("Z")
-plt.title("3D Skeleton Visualization")
-# 対象を正面から大体hd_00カメラの位置から見た画像を保存
-ax.view_init(elev=180, azim=5, roll=-90)
-# fig.savefig(save_path+"3dplot.png")
-plt.show()
-plt.close()
+    # 3Dランドマークのリストを作成 -> [x0, y0, z0, x1, ... , z33] (ndarray型はjsonシリアルに変更できないため)
+    landmark_list = []
+    for landmark in landmarks:
+        landmark_list.append(landmark[0]) # x
+        landmark_list.append(landmark[1]) # y
+        landmark_list.append(landmark[2]) # z
 
-cv2.destroyAllWindows()
+    # 推定結果をまとめたjsonファイルを作成
+    result = {'frame':frame_num, 'landmarks':landmark_list}
+    with open(OUTPUT_LANDMARKS_PATH+'frame_'+str(frame_num).zfill(8)+'.json', 'w') as f:
+        json.dump(result, f, indent=2)
+    frame_num += 100
+
+
+
+print("finish!!")
