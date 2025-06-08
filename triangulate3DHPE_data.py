@@ -227,18 +227,22 @@ def Triangulate3DHPE(img1, img2, K_l, R_l, T_l, K_r, R_r, T_r):
 
     # ランドマーク、マッチングリスト
     result_left, result_right = Landmark_detect(image_left=img1, image_right=img2)
-    
-    # 画像座標系への変換(同時に体のランドマークのみ使用)
-    pose_left, pose_right = Normalized_to_screen_coord(result_left.pose_landmarks, result_right.pose_landmarks, WIDTH, HEIGHT)
-    print("left=","\n",pose_left)
-    print("right=","\n",pose_right)
 
-    # 投影行列を計算
-    Pleft, Pright = Projection_mat_calc(K_l, R_l, T_l, K_r, R_r, T_r)
+    if result_left.pose_landmarks == None or result_right.pose_landmarks == None:
+        print("Enter no human!")
+        landmark3D = []
+    else:
+        # 画像座標系への変換(同時に体のランドマークのみ使用)
+        pose_left, pose_right = Normalized_to_screen_coord(result_left.pose_landmarks, result_right.pose_landmarks, WIDTH, HEIGHT)
+        print("left=","\n",pose_left)
+        print("right=","\n",pose_right)
 
-    # 3次元位置を復元
-    landmark3D = Triangulate_3Dpoint(Pleft, Pright, pose_left, pose_right)
-    print("landmark3D:","\n",landmark3D)
+        # 投影行列を計算
+        Pleft, Pright = Projection_mat_calc(K_l, R_l, T_l, K_r, R_r, T_r)
+
+        # 3次元位置を復元
+        landmark3D = Triangulate_3Dpoint(Pleft, Pright, pose_left, pose_right)
+        print("landmark3D:","\n",landmark3D)
 
     return result_left, result_right, landmark3D
 
@@ -422,10 +426,13 @@ while frame_num < 9056:
 
     # 3Dランドマークのリストを作成 -> [x0, y0, z0, x1, ... , z33] (ndarray型はjsonシリアルに変更できないため)
     landmark_list = []
-    for landmark in landmarks:
-        landmark_list.append(landmark[0]) # x
-        landmark_list.append(landmark[1]) # y
-        landmark_list.append(landmark[2]) # z
+    if len(landmarks) == 0:
+        landmark_list = None
+    else:
+        for landmark in landmarks:
+            landmark_list.append(landmark[0]) # x
+            landmark_list.append(landmark[1]) # y
+            landmark_list.append(landmark[2]) # z
 
     # 推定結果をまとめたjsonファイルを作成
     result = {'frame':frame_num, 'landmarks':landmark_list}

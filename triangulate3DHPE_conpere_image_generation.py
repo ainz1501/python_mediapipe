@@ -9,26 +9,52 @@ import glob
 import os
 
 """
-該当するフレームのみを取り出して3Dポーズを推定する
-・フレームリストのどれかを取り出す
-・そのフレーム数に達するまでreadをループ
-・両カメラの該当フレームを3DHPEに入力
-
-出力となる比較用画像
-3Dプロット
-左右のアノテーション画像
+結果比較用プログラム
+入力画像2枚、3Dプロットを表示
 """
 # MediaPipe Holisticモジュールを初期化
 mp_holistic = mp.solutions.holistic
 mp_drawing = mp.solutions.drawing_utils
 mp_pose = mp.solutions.pose
- 
+
+# キャプチャーするフレーム
+CAPTURE_RATE = 100  
+FIRST_FRAME_NUM = 137 # データセットに含まれるランドマークデータが137フレーム目以降からファイルが存在するため
+
+# 使用データ指定
+DATASET_NAME = "171204_pose3"
+GT_DATA_FOLDER_PATH = "./panoptic-toolbox/"+DATASET_NAME+"/hdPose3d_stage1_coco19"
+VIDEO1_NUM = 18
+VIDEO2_NUM = 23
+
+# 入力動画
+VIDEO1 = cv2.VideoCapture("./panoptic-toolbox/"+DATASET_NAME+"/hdVideos/hd_00_"+str(VIDEO1_NUM).zfill(2)+".mp4")
+VIDEO2 = cv2.VideoCapture("./panoptic-toolbox/"+DATASET_NAME+"/hdVideos/hd_00_"+str(VIDEO2_NUM).zfill(2)+".mp4")
+# キャリブレーションファイルオープン
+with open("./panoptic-toolbox/"+DATASET_NAME+"/calibration_"+DATASET_NAME+".json") as calibration_file:
+    parameters = json.load(calibration_file)
+print("cam_params:", not(parameters is None))
+# 内部パラメータ、外部パラメータ
+param1 = parameters["cameras"][479+VIDEO1_NUM] # HDカメラ00_00 [479]
+param2 = parameters["cameras"][479+VIDEO2_NUM]
+K_left = np.array(param1["K"])
+R_left, T_left = np.array(param1["R"]), np.array(param1["t"])
+K_right = np.array(param2["K"])
+R_right, T_right = np.array(param2["R"]), np.array(param2["t"])
+
+# パスまとめ
+TEMPORARY_IMAGES_STORAGE_PATH = "./output_images/images_temporary_storage/" # 一時的に画像を保存するフォルダのパス
+INPUT1_IMAGE_PATH = "./inputs/input_images/"+DATASET_NAME+"_cam"+str(VIDEO1_NUM).zfill(2)+"/"
+INPUT2_IMAGE_PATH = "./inputs/input_images/"+DATASET_NAME+"_cam"+str(VIDEO2_NUM).zfill(2)+"/"
+VIDEO_STORAGE_PATH = ".outputs/output_videos/"+DATASET_NAME+"_hdvideo"+str(VIDEO1_NUM).zfill(2)+str(VIDEO2_NUM).zfill(2)+"/"
+OUTPUT_LANDMARKS_PATH = "outputs/output_landmarks/"+DATASET_NAME+"_cam"+str(VIDEO1_NUM).zfill(2)+str(VIDEO2_NUM).zfill(2)+"/"
+
 # ボーン情報
 POSE_CONNECTIONS = mp_pose.POSE_CONNECTIONS
 # レンダリング情報
-JOINT_STYLE = mp_drawing.DrawingSpec(color=(0,0,255), thickness=5, circle_radius=3)
+JOINT_STYLE = mp_drawing.DrawingSpec(color=(255,0,0), thickness=5, circle_radius=3)
 BONE_STYLE = mp_drawing.DrawingSpec(color=(200,200,0), thickness=5)
-mp_drawing._VISIBILITY_THRESHOLD = 0.0 # 画像に表示する際のランドマークの信用度閾値
+mp_drawing._VISIBILITY_THRESHOLD = 0.0 # 画像に表示する際のランドマークの信用度閾値 
 
 # 処理関数
 def Landmark_detect(image_left, image_right):
