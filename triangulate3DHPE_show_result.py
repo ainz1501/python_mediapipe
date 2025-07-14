@@ -19,7 +19,13 @@ mp_pose = mp.solutions.pose
 
 # キャプチャーするフレーム
 CAPTURE_RATE = 100  
-FIRST_FRAME_NUM = 137 # データセットに含まれるランドマークデータが137フレーム目以降からファイルが存在するため
+FIRST_FRAME_NUM = 3037 # データセットに含まれるランドマークデータが137フレーム目以降からファイルが存在するため
+"""
+使用できないフレームについて
+下記のフレームは例外となるデータであるため、次のフレームをセットして再度プログラムを実行する．
+初期値 137
+8337: 手のデータが右手しかなく、ほとんどのランドマークがエラーを示している
+"""
 
 # 使用データ指定
 DATASET_NAME = "171204_pose3"
@@ -187,7 +193,7 @@ def concatenate_images(frame_num):
     image2 = cv2.imread(INPUT2_IMAGE_PATH+"frame"+str(frame_num).zfill(8)+".png")
 
     # 画像を横に連結
-    concatenation_image = cv2.hconcat([image1, image2])
+    concatenation_image = cv2.hconcat([image2, image1])
 
     return concatenation_image
 
@@ -214,6 +220,7 @@ def create_video_from_images(concatenation_left, concatenation_right, frame_rate
         out_Lvideo.write(frames_left[i])
         out_Rvideo.write(frames_right[i])
 # create_video_from_images(storage_path=FRAMES_STORAGE_PATH)
+
 """
 -------------------------------------------------------------------------------------------------------
 """
@@ -264,6 +271,9 @@ while frame_num < END_FRAME_NUM:
     plot_3Dskeleton(out_body, gt_body, gt_left, gt_right, POSE_CONNECTIONS, GT_POSE_CONNECTIONS, GT_HAND_CONNECTIONS)
     cv2.imshow("frame"+str(frame_num).zfill(8), concat_image) 
     plt.show()
+    
+    plt.clf()
+    plt.close()
     cv2.destroyAllWindows() 
 
     frame_num += CAPTURE_RATE

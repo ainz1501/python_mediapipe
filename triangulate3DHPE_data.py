@@ -424,7 +424,7 @@ while frame_num < END_FRAME_NUM:
     # 3Dランドマーク推定
     _, _, landmarks = Triangulate3DHPE(img1, img2, K_left, R_left, T_left, K_right, R_right, T_right)
 
-    # 3Dランドマークのリストを作成 -> [x0, y0, z0, x1, ... , z33] (ndarray型はjsonシリアルに変更できないため)
+    # 3Dランドマークのリストを作成 -> [x0, y0, z0, c0 x1, ... , z33] (ndarray型はjsonシリアルに変更できないため)
     landmark_list = []
     if len(landmarks) == 0:
         landmark_list = None
