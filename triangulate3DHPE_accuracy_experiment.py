@@ -342,7 +342,7 @@ def Triangulate_3Dpoint(Pleft, Pright, landmark_left, landmark_right):
     # left_pts = np.array(left_list).T
     # right_pts = np.array(right_list).T
     
-    # 特徴点の3D位置を再構築　（4行n列）
+    # 特徴点の3D位置を再構築（4行n列）
     points4D = cv2.triangulatePoints(Pleft, Pright, landmark_left.T, landmark_right.T)
     
     # 同次座標を3D座標に変換(3行n列)

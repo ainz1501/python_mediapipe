@@ -13,13 +13,12 @@ import os
 入力画像2枚、3Dプロットを表示
 """
 # MediaPipe Holisticモジュールを初期化
-mp_holistic = mp.solutions.holistic
 mp_drawing = mp.solutions.drawing_utils
 mp_pose = mp.solutions.pose
 
 # キャプチャーするフレーム
 CAPTURE_RATE = 100  
-FIRST_FRAME_NUM = 3037 # データセットに含まれるランドマークデータが137フレーム目以降からファイルが存在するため
+FIRST_FRAME_NUM = 137 # データセットに含まれるランドマークデータが137フレーム目以降からファイルが存在するため
 """
 使用できないフレームについて
 下記のフレームは例外となるデータであるため、次のフレームをセットして再度プログラムを実行する．
@@ -35,18 +34,6 @@ VIDEO1_NUM = 18
 VIDEO2_NUM = 23
 END_FRAME_NUM = 9056
 
-# キャリブレーションファイルオープン
-with open("./panoptic-toolbox/"+DATASET_NAME+"/calibration_"+DATASET_NAME+".json") as calibration_file:
-    parameters = json.load(calibration_file)
-print("cam_params:", not(parameters is None))
-# 内部パラメータ、外部パラメータ
-param1 = parameters["cameras"][479+VIDEO1_NUM] # HDカメラ00_00 [479]
-param2 = parameters["cameras"][479+VIDEO2_NUM]
-K_left = np.array(param1["K"])
-R_left, T_left = np.array(param1["R"]), np.array(param1["t"])
-K_right = np.array(param2["K"])
-R_right, T_right = np.array(param2["R"]), np.array(param2["t"])
-
 # パスまとめ
 TEMPORARY_IMAGES_STORAGE_PATH = "./output_images/images_temporary_storage/" # 一時的に画像を保存するフォルダのパス
 INPUT1_IMAGE_PATH = "./inputs/input_images/"+DATASET_NAME+"_cam"+str(VIDEO1_NUM).zfill(2)+"/"
@@ -54,25 +41,13 @@ INPUT2_IMAGE_PATH = "./inputs/input_images/"+DATASET_NAME+"_cam"+str(VIDEO2_NUM)
 VIDEO_STORAGE_PATH = ".outputs/output_videos/"+DATASET_NAME+"_hdvideo"+str(VIDEO1_NUM).zfill(2)+str(VIDEO2_NUM).zfill(2)+"/"
 OUTPUT_LANDMARKS_PATH = "outputs/output_landmarks/"+DATASET_NAME+"_cam"+str(VIDEO1_NUM).zfill(2)+str(VIDEO2_NUM).zfill(2)+"/"
 
-# 別データ間で同じ箇所を示す対応ランドマーク番号リスト[正解データ, 推定データ]
-GT_PR_MAP = [[1, 0],    # Nose
-    [3, 11],   # Left Shoulder
-    [4, 13],   # Left Elbow
-    [5, 15],   # Left Wrist
-    [6, 23],   # Left Hip
-    [7, 25],   # Left Knee
-    [8, 27],   # Left Ankle
-    [9, 12],   # Right Shoulder
-    [10, 14],  # Right Elbow
-    [11, 16],  # Right Wrist
-    [12, 24],  # Right Hip
-    [13, 26],  # Right Knee
-    [14, 28],  # Right Ankle
-    [15, 2],   # Left Eye
-    [16, 7],   # Left Ear
-    [17, 5],   # Right Eye
-    [18, 8],   # Right Ear
-    ]
+# 設定パラメータ
+START_FRAME = 137
+END_FRAME = 9056
+FRAME_INTERVAL = 100
+NUM_VIEWS = 31  # 0〜30
+NUM_LANDMARKS = 33
+EXCLUDED_VIEWS = [20, 21]
 
 """
 GT (CMU Panoptic Dataset)
@@ -156,56 +131,100 @@ def make_compe_landmarks(ground_truth, predicted, compe_map):
 
     return np.array(compe_ground_truth), np.array(compe_predicted)
 
+def project_point(X, R, t, K):
+    """
+    3D点Xをビューに投影する
+
+    Parameters:
+    - X: (3,) ndarray, ワールド座標の3D点
+    - R: (3,3) ndarray, 回転行列
+    - t: (3,) ndarray, 並進ベクトル
+    - K: (3,3) ndarray, カメラ内部パラメータ行列
+
+    Returns:
+    - x: (2,) ndarray, 画像座標
+    """
+    # 3D点をカメラ座標系に変換
+    X_cam = R @ X + t  # shape: (3,)
+
+    # 投影（内部パラメータを適用）
+    x_proj = K @ X_cam  # shape: (3,)
+
+    # 同次座標を正規化
+    x_img = x_proj[:2] / x_proj[2]
+
+    return x_img
+
 """
 -------------------------------------------------------------------------------------------------------
 """
 # メイン処理部
-frame_num = FIRST_FRAME_NUM
-while frame_num < END_FRAME_NUM:
-    # 正解データ呼び出し
-    with open(GT_DATA_FOLDER_PATH+"body3DScene_"+str(frame_num).zfill(8)+".json") as gt: # ボディ
-        ground_truth_file = gt
-        gt_frame = json.load(ground_truth_file)
-        print(not(gt_frame is None))
-    # (x,y,z,c)の19行4列の配列を作成
-    if len(gt_frame['bodies']) == 0:
-        gt_body = np.zeros((19, 4))
-    else:
-        gt_body = np.array(gt_frame['bodies'][0]['joints19']).reshape(-1, 4)
-    with open(GT_HAND_DATA_FOLDER_PATH+"handRecon3D_hd"+str(frame_num).zfill(8)+".json") as gt: # 両手
-        ground_truth_file = gt
-        gt_frame = json.load(ground_truth_file)
-        print(not(gt_frame is None))
-    # (x,y,z)の21行3列の配列を作成 'landmarks'の長さが63であり、手のランドマークは21個であることから想定
-    if len(gt_frame['people']) == 0:
-        gt_left = np.zeros((21, 3))
-        gt_right = np.zeros((21, 3))
-    else:
-        if not(len(gt_frame['people'][0]['left_hand']) == 0):
-            gt_left = np.array(gt_frame['people'][0]['left_hand']['landmarks']).reshape(-1, 3)
-        else:
-            gt_left = np.zeros((21,3))
-        if not(len(gt_frame['people'][0]['right_hand']) == 0):
-            gt_right = np.array(gt_frame['people'][0]['right_hand']['landmarks']).reshape(-1, 3)
-        else:
-            gt_right = np.zeros((21,3))
-       
+if __name__ == "__main__":
+    # キャリブレーションファイル読み込み
+    with open(f"./panoptic-toolbox/{DATASET_NAME}/calibration_{DATASET_NAME}.json") as calibration_file:
+        parameters = json.load(calibration_file)
+    print("cam_params:", not(parameters is None))
 
-    # 推定データ呼び出し
-    with open(OUTPUT_LANDMARKS_PATH+"frame_"+str(frame_num).zfill(8)+".json") as out:
-        out_frame_data = json.load(out)
-        print(not(out_frame_data is None))
-    # (x,y,z)の33行3列の配列を作成
-    if out_frame_data['landmarks'] == None:
-        out_body = np.zeros((33, 3))
-    else:
-        out_body = np.array(out_frame_data['landmarks']).reshape(-1, 3)
-    
-    # 画像、プロット表示
-    compe_gt, compe_pd = make_compe_landmarks(gt_body, out_body, GT_PR_MAP)
-    mpjpe = compute_mpjpe(compe_pd, compe_gt[:,:3]) # 4列目（信頼度）は除く
-    print("frame"+str(frame_num).zfill(4)+", mpjpe:"+str(mpjpe))
+    # カメラパラメータ取得（HDカメラのみ）
+    K_all = [params["K"] for params in parameters["cameras"] if params["type"] == "hd"]
+    R_all = [params["R"] for params in parameters["cameras"] if params["type"] == "hd"]
+    t_all = [params["t"] for params in parameters["cameras"] if params["type"] == "hd"]
 
-    frame_num += CAPTURE_RATE
+    for frame_num in range(FIRST_FRAME_NUM, END_FRAME_NUM+1, FRAME_INTERVAL):
+        # ベストランドマーク呼び出し
+        with open("./outputs/best_landmarks/best_landmarks.json", "r") as f:
+            data = json.load(f)
+        frame_data = data.get(str(frame_num))
 
-cv2.destroyAllWindows()
+        # 推定ランドマーク
+        with open(f"./{OUTPUT_LANDMARKS_PATH}frame_{str(frame_num).zfill(8)}.json", "r") as f:
+            data = json.load(f)
+        landmarks_3d = data.get("landmarks")
+
+        # MediaPipeの部位ごとのランドマークID（文字列で）
+        right_hand_ids = [str(i) for i in [15, 17, 19, 21]]  # 右手：右手首, 右親指先, 右人差し指先, 右小指先
+        left_hand_ids  = [str(i) for i in [16, 18, 20, 22]]  # 左手：左手首, 左親指先, 左人差し指先, 左小指先
+        right_leg_ids  = [str(i) for i in [24, 28, 32]]  # 右足：腰, 膝, 足首, 足先
+        left_leg_ids   = [str(i) for i in [23, 27, 31]]  # 左足：腰, 膝, 足首, 足先
+
+        # 誤差格納用
+        errors = {
+            "right_hand": [],
+            "left_hand": [],
+            "right_leg": [],
+            "left_leg": []
+        }
+
+        for lm_id, lm_info in frame_data.items():
+            view_id = lm_info["view"]
+            gt_2d = np.array([lm_info["x"], lm_info["y"]])
+
+            if lm_id not in landmarks_3d:
+                continue
+            
+            X_world = landmarks_3d[lm_id]
+            R = np.array(R_all[view_id])
+            t = np.array(t_all[view_id]).reshape(3,)
+            K = np.array(K_all[view_id])
+
+            projected_2d = project_point(X_world, R, t, K)
+            error = np.linalg.norm(projected_2d - gt_2d)
+
+            # 対応する部位に分類
+            if lm_id in right_hand_ids:
+                errors["right_hand"].append(error)
+            elif lm_id in left_hand_ids:
+                errors["left_hand"].append(error)
+            elif lm_id in right_leg_ids:
+                errors["right_leg"].append(error)
+            elif lm_id in left_leg_ids:
+                errors["left_leg"].append(error)
+        print(f"frame_num:{lm_id}")
+
+        # === MPJPE 出力 ===
+        for part, part_errors in errors.items():
+            if part_errors:
+                mpjpe = np.mean(part_errors)
+                print(f"{part} MPJPE: {mpjpe:.2f} cm")
+            else:
+                print(f"{part}: ランドマークが見つかりませんでした。")

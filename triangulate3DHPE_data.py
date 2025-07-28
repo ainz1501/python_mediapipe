@@ -424,18 +424,17 @@ while frame_num < END_FRAME_NUM:
     # 3Dランドマーク推定
     _, _, landmarks = Triangulate3DHPE(img1, img2, K_left, R_left, T_left, K_right, R_right, T_right)
 
-    # 3Dランドマークのリストを作成 -> [x0, y0, z0, c0 x1, ... , z33] (ndarray型はjsonシリアルに変更できないため)
-    landmark_list = []
+    # 3Dランドマークの辞書を作成 -> {"0": [x0, y0, z0], "1": [x1, y1, z1], ...}
+    landmark_dict = {}
+
     if len(landmarks) == 0:
-        landmark_list = None
+        landmark_dict = None
     else:
-        for landmark in landmarks:
-            landmark_list.append(landmark[0]) # x
-            landmark_list.append(landmark[1]) # y
-            landmark_list.append(landmark[2]) # z
+        for idx, landmark in enumerate(landmarks):
+            landmark_dict[str(idx)] = [landmark[0], landmark[1], landmark[2]]
 
     # 推定結果をまとめたjsonファイルを作成
-    result = {'frame':frame_num, 'landmarks':landmark_list}
+    result = {'frame':frame_num, 'landmarks':landmark_dict}
     with open(OUTPUT_LANDMARKS_PATH+'frame_'+str(frame_num).zfill(8)+'.json', 'w') as f:
         json.dump(result, f, indent=2)
     frame_num += CAPTURE_RATE

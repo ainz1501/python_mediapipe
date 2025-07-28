@@ -201,7 +201,7 @@ while frame_num < END_FRAME_NUM:
     else:
         out_body = np.array(out_frame_data['landmarks']).reshape(-1, 3)
     
-    # 画像、プロット表示
+    # MPJPEの計算
     compe_gt, compe_pd = make_compe_landmarks(gt_body, out_body, GT_PR_MAP)
     mpjpe = compute_mpjpe(compe_pd, compe_gt[:,:3]) # 4列目（信頼度）は除く
     print("frame"+str(frame_num).zfill(4)+", mpjpe:"+str(mpjpe))

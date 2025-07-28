@@ -1,3 +1,10 @@
+v2.0
+- "triangulate3DHPE_partial_accuracy.py" can now display MPJPE for both hands and feet for each frame
+- Added "best_landmarks.json" which saves the most reliable landmarks for each landmark in each frame across all views, and "triangulate3DHPE_mpdata.py" which generates it.
+- Changed the format of estimated landmark data in "triangulate3DHPE_data.py"
+    - Changed from [x0, y0, z0, x1, ... , z32] to {"0":[x0, y0, z0], "1":[x1, y1, z1], ... , "32":[x32, y32, z32]} dictionary format
+
+
 v1.0
 - add "triangulate3DHPE_data.py", "triangulate3DHPE_show_result.py", "triangulate3DHPEcompute_mpjpe.py", "triangulate3DHPE_partial_accuracy"
     - triangulate3DHPE_data aggregate predicted landmarks
