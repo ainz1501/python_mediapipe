@@ -19,7 +19,7 @@ mp_pose = mp.solutions.pose
 
 # キャプチャーするフレーム
 CAPTURE_RATE = 100  
-FIRST_FRAME_NUM = 3037 # データセットに含まれるランドマークデータが137フレーム目以降からファイルが存在するため
+FIRST_FRAME_NUM = 137 # データセットに含まれるランドマークデータが137フレーム目以降からファイルが存在するため
 """
 使用できないフレームについて
 下記のフレームは例外となるデータであるため、次のフレームをセットして再度プログラムを実行する．
@@ -264,7 +264,10 @@ while frame_num < END_FRAME_NUM:
     if out_frame_data['landmarks'] == None:
         out_body = np.zeros((33, 3))
     else:
-        out_body = np.array(out_frame_data['landmarks']).reshape(-1, 3)
+        out_body_list = []
+        for lm_num, lm in out_frame_data['landmarks'].items():
+            out_body_list.append(lm)
+        out_body = np.array(out_body_list).reshape(-1, 3)
     
     # 画像、プロット表示
     concat_image = concatenate_images(frame_num) # 比較しやすいように入力画像を連結

@@ -1,3 +1,10 @@
+v3.0
+- For evaluating best-landmark's accuracy, "triangulate3DHPE_bestmp_accuracy.py" and "triangulate3DHPE_bestmp_accuracy_conf90_perframe.py" was made
+    -  "triangulate3DHPE_bestmp_accuracy.py" calcurate MPJPE between best-landmark and detaset's landmark. you can determine the threshold of reliability. it omit a frame which exist dataset's landmark that its reliability is lower then it
+    - "triangulate3DHPE_bestmp_accuracy_conf90_perframe.py" culculate MPJPE between best-landmark and dataset's landmark which is not lower than reliability threshold. (This one omit only landmark. not frame)
+- Culculation body's MPJPE, "compute_mpjpe.py" was made. 
+- "compute_mpjpe_copy.py" in production...
+
 v2.0
 - "triangulate3DHPE_partial_accuracy.py" can now display MPJPE for both hands and feet for each frame
 - Added "best_landmarks.json" which saves the most reliable landmarks for each landmark in each frame across all views, and "triangulate3DHPE_mpdata.py" which generates it.

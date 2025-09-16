@@ -9,8 +9,8 @@ import glob
 import os
 
 """
-結果比較用プログラム
-入力画像2枚、3Dプロットを表示
+MediaPipe Poseの高い信頼度をもつランドマーク精度を検証する
+入力として"best_landmarks.json"と"hdPose3d_stage1_coco19"の各フレームの結果を用いる
 """
 # MediaPipe Holisticモジュールを初期化
 mp_drawing = mp.solutions.drawing_utils
@@ -170,61 +170,83 @@ if __name__ == "__main__":
     R_all = [params["R"] for params in parameters["cameras"] if params["type"] == "hd"]
     t_all = [params["t"] for params in parameters["cameras"] if params["type"] == "hd"]
 
+    # CMU PanopticとMediaPipe Pose との対応ランドマークID
+    GT_MP_MAP = [
+        [1, 0],    # Nose
+        [3, 11],   # Left Shoulder
+        [4, 13],   # Left Elbow
+        [5, 15],   # Left Wrist
+        [6, 23],   # Left Hip
+        [7, 25],   # Left Knee
+        [8, 27],   # Left Ankle
+        [9, 12],   # Right Shoulder
+        [10, 14],  # Right Elbow
+        [11, 16],  # Right Wrist
+        [12, 24],  # Right Hip
+        [13, 26],  # Right Knee
+        [14, 28],  # Right Ankle
+        [15, 2],   # Left Eye
+        [16, 7],   # Left Ear
+        [17, 5],   # Right Eye
+        [18, 8],   # Right Ear
+    ]
+
     for frame_num in range(FIRST_FRAME_NUM, END_FRAME_NUM+1, FRAME_INTERVAL):
         # ベストランドマーク呼び出し
         with open("./outputs/best_landmarks/best_landmarks.json", "r") as f:
             data = json.load(f)
         frame_data = data.get(str(frame_num))
+        lm_0 = frame_data["0"]
 
-        # 推定ランドマーク
-        with open(f"./{OUTPUT_LANDMARKS_PATH}frame_{str(FIRST_FRAME_NUM).zfill(8)}.json", "r") as f:
+        # GTランドマーク呼び出し
+        with open(f"{GT_DATA_FOLDER_PATH}body3DScene_{str(frame_num).zfill(8)}.json", "r") as f:
             data = json.load(f)
-        landmarks_3d = data.get("landmarks")
+        bodies = data.get("bodies")
+        landmarks_3d = np.array(bodies[0]["joints19"] if len(bodies) is not 0 else []).reshape(-1, 4)
 
-        # MediaPipeの部位ごとのランドマークID（文字列で）
-        right_hand_ids = [str(i) for i in [15, 17, 19, 21]]  # 右手：右手首, 右親指先, 右人差し指先, 右小指先
-        left_hand_ids  = [str(i) for i in [16, 18, 20, 22]]  # 左手：左手首, 左親指先, 左人差し指先, 左小指先
-        right_leg_ids  = [str(i) for i in [24, 28, 32]]  # 右足：腰, 膝, 足首, 足先
-        left_leg_ids   = [str(i) for i in [23, 27, 31]]  # 左足：腰, 膝, 足首, 足先
-
+        # イレギュラーが存在しないフレームのみ計測
+        mpjpe_flag = True
+        if landmarks_3d.shape[0] == 0:
+            mpjpe_flag = False
+        for lm in landmarks_3d:
+            if lm[3] <= 0.1:
+                mpjpe_flag = False
+                break
+                
         # 誤差格納用
         errors = {
-            "right_hand": [],
-            "left_hand": [],
-            "right_leg": [],
-            "left_leg": []
+            "holistic": []
         }
 
-        for lm_id, lm_info in frame_data.items():
-            view_id = lm_info["view"]
-            gt_2d = np.array([lm_info["x"], lm_info["y"]])
+        # 使用するGTランドマークリスト
+        GT_LANDMARK = landmarks_3d
 
-            if lm_id not in landmarks_3d:
-                continue
-            
-            X_world = landmarks_3d[lm_id]
-            R = np.array(R_all[view_id])
-            t = np.array(t_all[view_id]).reshape(3,)
-            K = np.array(K_all[view_id])
+        # MPJPE 計算処理
+        print(f"frame_num:{frame_num}")
+        if mpjpe_flag:
+            for gt_id, mp_id in GT_MP_MAP:
+                lm_info = frame_data[str(mp_id)]
+                view_id = lm_info["view"]
+                gt_2d = np.array([lm_info["x"], lm_info["y"]])
+                
+                X_world = GT_LANDMARK[gt_id,:3]
+                R = np.array(R_all[view_id])
+                t = np.array(t_all[view_id]).reshape(3,)
+                K = np.array(K_all[view_id])
 
-            projected_2d = project_point(X_world, R, t, K)
-            error = np.linalg.norm(projected_2d - gt_2d)
+                projected_2d = project_point(X_world, R, t, K)
+                error = np.linalg.norm(projected_2d - gt_2d)
 
-            # 対応する部位に分類
-            if lm_id in right_hand_ids:
-                errors["right_hand"].append(error)
-            elif lm_id in left_hand_ids:
-                errors["left_hand"].append(error)
-            elif lm_id in right_leg_ids:
-                errors["right_leg"].append(error)
-            elif lm_id in left_leg_ids:
-                errors["left_leg"].append(error)
-        print(f"frame_num:{lm_id}")
+                # 対応する部位に分類
+                # print("error added!")
+                errors["holistic"].append(error)
 
-        # === MPJPE 出力 ===
-        for part, part_errors in errors.items():
-            if part_errors:
-                mpjpe = np.mean(part_errors)
-                print(f"{part} MPJPE: {mpjpe:.2f} cm")
-            else:
-                print(f"{part}: ランドマークが見つかりませんでした。")
+            # === MPJPE 出力 ===
+            for part, part_errors in errors.items():
+                if part_errors:
+                    mpjpe = np.mean(part_errors)
+                    print(f"{part} MPJPE: {mpjpe:.2f} cm")
+                else:
+                    print(f"{part}: ランドマークが見つかりませんでした。")
+        else:
+            print("GTランドマークが見つかりませんでした")

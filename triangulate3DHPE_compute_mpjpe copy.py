@@ -189,6 +189,29 @@ while frame_num < END_FRAME_NUM:
         mpjpe_flag = False
     else:
         gt_body = np.array(gt_frame['bodies'][0]['joints19']).reshape(-1, 4)
+
+    # 両手それぞれの正解データ呼び出し
+    with open(GT_HAND_DATA_FOLDER_PATH+"handRecon3D_hd"+str(frame_num).zfill(8)+".json") as gt: # 両手
+        ground_truth_file = gt
+        gt_frame = json.load(ground_truth_file)
+        # print(not(gt_frame is None))
+    # (x,y,z)の21行3列の配列を作成 'landmarks'の長さが63であり、手のランドマークは21個であることから想定
+    if len(gt_frame['people']) == 0:
+        gt_left = np.zeros((21, 3))
+        gt_right = np.zeros((21, 3))
+    else:
+        # 左手データ収納
+        if not(len(gt_frame['people'][0]['left_hand']) == 0):
+            gt_left = np.array(gt_frame['people'][0]['left_hand']['landmarks']).reshape(-1, 3)
+        else:
+            mpjpe_flag = False
+            gt_left = np.zeros((21,3))
+        # 右手データ収納
+        if not(len(gt_frame['people'][0]['right_hand']) == 0):
+            gt_right = np.array(gt_frame['people'][0]['right_hand']['landmarks']).reshape(-1, 3)
+        else:
+            mpjpe_flag = False
+            gt_right = np.zeros((21,3))
        
 
     # 推定データ呼び出し
@@ -208,11 +231,33 @@ while frame_num < END_FRAME_NUM:
     
     # MPJPEの計算
     compe_gt, compe_pd = make_compe_landmarks(gt_body, out_body, GT_PR_MAP, confidence=0.0)
+    left_compe_gt, left_compe_pd = make_compe_landmarks(gt_left, out_body, LEFT_HAND_MAP, confidence=0.0)
+    right_compe_gt, right_compe_pd = make_compe_landmarks(gt_right, out_body, RIGHT_HAND_MAP, confidence=0.0)
+
     if mpjpe_flag:
         if compe_gt.size > 0 and compe_pd.size > 0:
             mpjpe = compute_mpjpe(compe_pd, compe_gt[:,:3]) # 4列目（信頼度）は除く
             # print(f"frame:{frame_num}, {mpjpe:.2f}")
             print(f"{mpjpe:.2f}")
+
+        if left_compe_gt.size > 0 and left_compe_pd.size > 0:
+            left_mpjpe = compute_mpjpe(left_compe_pd, left_compe_gt[:, :3])
+            print(f"frame:{frame_num}, {left_mpjpe:.2f}")
+            # print(f"{left_mpjpe:.2f}")
+
+        if right_compe_gt.size > 0 and right_compe_pd.size > 0:
+            right_mpjpe = compute_mpjpe(right_compe_pd, right_compe_gt)
+            print(f"frame:{frame_num}, {right_mpjpe:.2f}")
+            print(f"{right_mpjpe:.2f}")
+        
+        holistic_gt = np.concatenate(compe_gt, left_compe_gt, right_compe_gt)
+        holistic_pd = np.concatenate(compe_pd, left_compe_pd, right_compe_pd)
+        if holistic_gt.size > 0 and holistic_pd.size > 0:
+            holistic_mpjpe = compute_mpjpe(holistic_pd, holistic_gt)
+            print(f"frame:{frame_num}, {holistic_mpjpe:.2f}")
+            print(f"{holistic_mpjpe}")
+
+
         else:
             print("対象のランドマークがありませんでした")
     else:
