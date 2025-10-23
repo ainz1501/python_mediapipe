@@ -5,3 +5,8 @@ tmp_images/
 inputs/ 
 outputs/
 test.py 
+sys_inputs/
+sys_outputs/
+gt_data_171204_pose3/
+output_images/
+__pycache__/
