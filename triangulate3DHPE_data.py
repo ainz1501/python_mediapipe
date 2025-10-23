@@ -1,10 +1,10 @@
-import sys
 import cv2
 import mediapipe as mp
 import matplotlib.pyplot as plt
 import numpy as np
 import json
 import os
+from typing import List
 """
 実験で使用するフレームを抜き出して保存する
 推定した3Dランドマークをリスト化して保存する
@@ -14,46 +14,21 @@ mp_holistic = mp.solutions.holistic
 mp_drawing = mp.solutions.drawing_utils
 mp_pose = mp.solutions.pose
 
-# キャプチャーするフレーム
-CAPTURE_RATE = 100  
-FIRST_FRAME_NUM = 137 # データセットに含まれるランドマークデータが137フレーム目以降からファイルが存在するため
-
-# 使用データセットの名称や番号、フォルダのパスなど
-DATASET_NAME = "171204_pose3"
-VIDEO1_NUM = 18
-VIDEO2_NUM = 23
-GT_DATA_FOLDER_PATH = "./panoptic-toolbox/171204_pose3/hdPose3d_stage1_coco19/"
-END_FRAME_NUM = 9056
-TEMPORARY_IMAGES_STORAGE_PATH = "./output_images/images_temporary_storage/" # 一時的に画像を保存するフォルダのパス
-INPUT1_IMAGE_PATH = "./inputs/input_images/"+DATASET_NAME+"_cam"+str(VIDEO1_NUM).zfill(2)+"/"
-INPUT2_IMAGE_PATH = "./inputs/input_images/"+DATASET_NAME+"_cam"+str(VIDEO2_NUM).zfill(2)+"/"
-VIDEO_STORAGE_PATH = ".outputs/output_videos/"+DATASET_NAME+"_hdvideo"+str(VIDEO1_NUM).zfill(2)+str(VIDEO2_NUM).zfill(2)+"/"
-OUTPUT_LANDMARKS_PATH = "outputs/output_landmarks/"+DATASET_NAME+"_cam"+str(VIDEO1_NUM).zfill(2)+str(VIDEO2_NUM).zfill(2)+"/"
-
-# 入力動画
-VIDEO1 = cv2.VideoCapture("./panoptic-toolbox/"+DATASET_NAME+"/hdVideos/hd_00_"+str(VIDEO1_NUM).zfill(2)+".mp4")
-VIDEO2 = cv2.VideoCapture("./panoptic-toolbox/"+DATASET_NAME+"/hdVideos/hd_00_"+str(VIDEO2_NUM).zfill(2)+".mp4")
-# キャリブレーションファイルオープン
-with open("./panoptic-toolbox/"+DATASET_NAME+"/calibration_"+DATASET_NAME+".json") as calibration_file:
-    parameters = json.load(calibration_file)
-print("cam_params:", not(parameters is None))
-# 内部パラメータ、外部パラメータ
-param1 = parameters["cameras"][479+VIDEO1_NUM] # HDカメラ00_00 [479]
-param2 = parameters["cameras"][479+VIDEO2_NUM]
-K_left = np.array(param1["K"])
-R_left, T_left = np.array(param1["R"]), np.array(param1["t"])
-K_right = np.array(param2["K"])
-R_right, T_right = np.array(param2["R"]), np.array(param2["t"])
-
-# フォルダ作成
-if not os.path.isdir(VIDEO_STORAGE_PATH): # 指定したフォルダがなければ作成
-    os.makedirs(VIDEO_STORAGE_PATH)
-if not os.path.isdir(INPUT1_IMAGE_PATH): 
-    os.makedirs(INPUT1_IMAGE_PATH)
-if not os.path.isdir(INPUT2_IMAGE_PATH): 
-    os.makedirs(INPUT2_IMAGE_PATH)
-if not os.path.isdir(OUTPUT_LANDMARKS_PATH): 
-    os.makedirs(OUTPUT_LANDMARKS_PATH)
+# デフォルト設定値
+DEFAULT_CAPTURE_RATE = 100
+# データセットに含まれるランドマークデータが137フレーム目以降からファイルが存在するため
+DEFAULT_FIRST_FRAME_NUM = 137
+DEFAULT_DATASET_NAME = "171204_pose3"
+DEFAULT_VIDEO1_NUM = 18
+DEFAULT_VIDEO2_NUM = 23
+DEFAULT_END_FRAME_NUM = 9056
+# 一時的に画像を保存するフォルダのパス
+DEFAULT_TEMPORARY_IMAGES_STORAGE_PATH = "./output_images/images_temporary_storage/"
+DEFAULT_PANOPTIC_ROOT = "./panoptic-toolbox"
+DEFAULT_INPUTS_ROOT = "./sys_inputs/input_images"
+DEFAULT_VIDEOS_ROOT = "./sys_outputs/output_videos"
+DEFAULT_LANDMARKS_ROOT = "./sys_outputs/output_landmarks"
+TEMPORARY_IMAGES_STORAGE_PATH = DEFAULT_TEMPORARY_IMAGES_STORAGE_PATH
 
 # ボーン情報
 POSE_CONNECTIONS = mp_pose.POSE_CONNECTIONS
@@ -246,6 +221,127 @@ def Triangulate3DHPE(img1, img2, K_l, R_l, T_l, K_r, R_r, T_r):
 
     return result_left, result_right, landmark3D
 
+def run_triangulate3dhpe_data(
+    dataset_name: str = DEFAULT_DATASET_NAME,
+    video1_num: int = DEFAULT_VIDEO1_NUM,
+    video2_num: int = DEFAULT_VIDEO2_NUM,
+    capture_rate: int = DEFAULT_CAPTURE_RATE,
+    first_frame_num: int = DEFAULT_FIRST_FRAME_NUM,
+    end_frame_num: int = DEFAULT_END_FRAME_NUM,
+    panoptic_root: str = DEFAULT_PANOPTIC_ROOT,
+    inputs_root: str = DEFAULT_INPUTS_ROOT,
+    videos_root: str = DEFAULT_VIDEOS_ROOT,
+    landmarks_root: str = DEFAULT_LANDMARKS_ROOT,
+    temp_storage_path: str = DEFAULT_TEMPORARY_IMAGES_STORAGE_PATH,
+) -> List[int]:
+    """
+    指定した設定でMediaPipeを用いた3Dランドマーク推定と保存を実行する。
+
+    Parameters
+    ----------
+    dataset_name : str
+        使用するデータセット名。
+    video1_num : int
+        左カメラの番号。
+    video2_num : int
+        右カメラの番号。
+    capture_rate : int
+        フレームのサンプリング間隔。
+    first_frame_num : int
+        推定を始めるフレーム番号。
+    end_frame_num : int
+        推定を終了するフレーム番号（未満まで処理）。
+    panoptic_root : str
+        Panopticデータセットが保存されているルートパス。
+    inputs_root : str
+        入力画像を保存するルートパス。
+    videos_root : str
+        比較用動画を保存するルートパス。
+    landmarks_root : str
+        ランドマーク推定結果を保存するルートパス。
+    temp_storage_path : str
+        中間生成物を保存するパス。
+
+    Returns
+    -------
+    List[int]
+        推定結果を保存したフレーム番号のリスト。
+    """
+    dataset_root = os.path.join(panoptic_root, dataset_name)
+    video1_path = os.path.join(dataset_root, "hdVideos", f"hd_00_{str(video1_num).zfill(2)}.mp4")
+    video2_path = os.path.join(dataset_root, "hdVideos", f"hd_00_{str(video2_num).zfill(2)}.mp4")
+    calibration_path = os.path.join(dataset_root, f"calibration_{dataset_name}.json")
+
+    input1_image_path = os.path.join(inputs_root, f"{dataset_name}_cam{str(video1_num).zfill(2)}")
+    input2_image_path = os.path.join(inputs_root, f"{dataset_name}_cam{str(video2_num).zfill(2)}")
+    video_storage_path = os.path.join(videos_root, f"{dataset_name}_hdvideo{str(video1_num).zfill(2)}{str(video2_num).zfill(2)}")
+    output_landmarks_path = os.path.join(landmarks_root, f"{dataset_name}_cam{str(video1_num).zfill(2)}{str(video2_num).zfill(2)}")
+
+    os.makedirs(video_storage_path, exist_ok=True)
+    os.makedirs(input1_image_path, exist_ok=True)
+    os.makedirs(input2_image_path, exist_ok=True)
+    os.makedirs(output_landmarks_path, exist_ok=True)
+    os.makedirs(temp_storage_path, exist_ok=True)
+
+    with open(calibration_path) as calibration_file:
+        parameters = json.load(calibration_file)
+    print("cam_params:", parameters is not None)
+
+    param1 = parameters["cameras"][479 + video1_num]
+    param2 = parameters["cameras"][479 + video2_num]
+    K_left = np.array(param1["K"])
+    R_left, T_left = np.array(param1["R"]), np.array(param1["t"])
+    K_right = np.array(param2["K"])
+    R_right, T_right = np.array(param2["R"]), np.array(param2["t"])
+
+    video1 = cv2.VideoCapture(video1_path)
+    video2 = cv2.VideoCapture(video2_path)
+
+    if not video1.isOpened() or not video2.isOpened():
+        video1.release()
+        video2.release()
+        raise FileNotFoundError("指定した動画ファイルを開けませんでした。パスを確認してください。")
+
+    processed_frames: List[int] = []
+    frame_num = first_frame_num
+
+    try:
+        while frame_num < end_frame_num:
+            video1.set(cv2.CAP_PROP_POS_FRAMES, frame_num - 1)
+            video2.set(cv2.CAP_PROP_POS_FRAMES, frame_num - 1)
+            print("now frame:" + str(video1.get(cv2.CAP_PROP_POS_FRAMES)))
+
+            ret1, img1 = video1.read()
+            ret2, img2 = video2.read()
+            print("now frame:" + str(video1.get(cv2.CAP_PROP_POS_FRAMES)))
+
+            if not (ret1 and ret2):
+                print("breaked frame:", frame_num)
+                break
+
+            cv2.imwrite(os.path.join(input1_image_path, f"frame{frame_num:08d}.png"), img1)
+            cv2.imwrite(os.path.join(input2_image_path, f"frame{frame_num:08d}.png"), img2)
+
+            _, _, landmarks = Triangulate3DHPE(img1, img2, K_left, R_left, T_left, K_right, R_right, T_right)
+
+            landmark_dict = None
+            if len(landmarks) != 0:
+                landmark_dict = {str(idx): [float(landmark[0]), float(landmark[1]), float(landmark[2])]
+                                 for idx, landmark in enumerate(landmarks)}
+
+            result = {"frame": frame_num, "landmarks": landmark_dict}
+            with open(os.path.join(output_landmarks_path, f"frame_{frame_num:08d}.json"), "w") as f:
+                json.dump(result, f, indent=2)
+
+            processed_frames.append(frame_num)
+            frame_num += capture_rate
+    finally:
+        video1.release()
+        video2.release()
+
+    print("finish!!")
+    return processed_frames
+
 # 結果表示用関数
 def annotate_image(image_L, landmarks_L, image_R, landmarks_R, connections, jointstyle, bonestyle):
     """
@@ -391,54 +487,5 @@ def create_video_from_images(concatenation_left, concatenation_right, frame_rate
         out_Lvideo.write(frames_left[i])
         out_Rvideo.write(frames_right[i])
 
-# メイン処理
-frame_num = FIRST_FRAME_NUM
-
-# # 正解データ呼び出し
-# gt_body_list = []       # GTデータリスト
-# with open(GT_DATA_FOLDER_PATH+"body3DScene_"+str(frame_num).zfill(8)+".json") as gt:
-#     ground_truth_file = gt
-#     gt_frame = json.load(ground_truth_file)
-#     print(not(gt_frame is None))
-# # (x,y,z,c)の19行4列の配列を作成
-# if len(gt_frame['bodies']) == 0:
-#     gt_body = np.zeros((19, 4))
-# else:
-#     gt_body = np.array(gt_frame['bodies'][0]['joints19']).reshape(-1, 4)
-
-while frame_num < END_FRAME_NUM: 
-    # 入力フレーム取得
-    VIDEO1.set(cv2.CAP_PROP_POS_FRAMES, frame_num-1)
-    VIDEO2.set(cv2.CAP_PROP_POS_FRAMES, frame_num-1)
-    print("now frame:"+str(VIDEO1.get(cv2.CAP_PROP_POS_FRAMES)))
-    ret1, img1 = VIDEO1.read()
-    ret2, img2 = VIDEO2.read()
-    print("now frame:"+str(VIDEO1.get(cv2.CAP_PROP_POS_FRAMES)))
-    if not (ret1 and ret2):
-        print("breaked frame:", frame_num)
-        sys.exit()
-    # フレーム保存
-    cv2.imwrite(INPUT1_IMAGE_PATH+"frame"+str(frame_num).zfill(8)+".png", img1)
-    cv2.imwrite(INPUT2_IMAGE_PATH+"frame"+str(frame_num).zfill(8)+".png", img2)
-
-    # 3Dランドマーク推定
-    _, _, landmarks = Triangulate3DHPE(img1, img2, K_left, R_left, T_left, K_right, R_right, T_right)
-
-    # 3Dランドマークの辞書を作成 -> {"0": [x0, y0, z0], "1": [x1, y1, z1], ...}
-    landmark_dict = {}
-
-    if len(landmarks) == 0:
-        landmark_dict = None
-    else:
-        for idx, landmark in enumerate(landmarks):
-            landmark_dict[str(idx)] = [landmark[0], landmark[1], landmark[2]]
-
-    # 推定結果をまとめたjsonファイルを作成
-    result = {'frame':frame_num, 'landmarks':landmark_dict}
-    with open(OUTPUT_LANDMARKS_PATH+'frame_'+str(frame_num).zfill(8)+'.json', 'w') as f:
-        json.dump(result, f, indent=2)
-    frame_num += CAPTURE_RATE
-
-
-
-print("finish!!")
+if __name__ == "__main__":
+    run_triangulate3dhpe_data(capture_rate=30)

@@ -19,7 +19,7 @@ mp_pose = mp.solutions.pose
 
 # キャプチャーするフレーム
 CAPTURE_RATE = 100  
-FIRST_FRAME_NUM = 137 # データセットに含まれるランドマークデータが137フレーム目以降からファイルが存在するため
+FIRST_FRAME_NUM = 1737 # データセットに含まれるランドマークデータが137フレーム目以降からファイルが存在するため
 """
 使用できないフレームについて
 下記のフレームは例外となるデータであるため、次のフレームをセットして再度プログラムを実行する．
@@ -221,12 +221,7 @@ def create_video_from_images(concatenation_left, concatenation_right, frame_rate
         out_Rvideo.write(frames_right[i])
 # create_video_from_images(storage_path=FRAMES_STORAGE_PATH)
 
-"""
--------------------------------------------------------------------------------------------------------
-"""
-# メイン処理部
-frame_num = FIRST_FRAME_NUM
-while frame_num < END_FRAME_NUM:
+def read_gt_landmarks(frame_num):
     # 正解データ呼び出し
     with open(GT_DATA_FOLDER_PATH+"body3DScene_"+str(frame_num).zfill(8)+".json") as gt: # ボディ
         ground_truth_file = gt
@@ -254,9 +249,11 @@ while frame_num < END_FRAME_NUM:
             gt_right = np.array(gt_frame['people'][0]['right_hand']['landmarks']).reshape(-1, 3)
         else:
             gt_right = np.zeros((21,3))
-       
+    
+    return gt_body, gt_left, gt_right
 
-    # 推定データ呼び出し
+def read_pd_landmarks(frame_num):
+    # 推定ランドマーク呼び出し
     with open(OUTPUT_LANDMARKS_PATH+"frame_"+str(frame_num).zfill(8)+".json") as out:
         out_frame_data = json.load(out)
         print(not(out_frame_data is None))
@@ -268,17 +265,31 @@ while frame_num < END_FRAME_NUM:
         for lm_num, lm in out_frame_data['landmarks'].items():
             out_body_list.append(lm)
         out_body = np.array(out_body_list).reshape(-1, 3)
-    
-    # 画像、プロット表示
-    concat_image = concatenate_images(frame_num) # 比較しやすいように入力画像を連結
-    plot_3Dskeleton(out_body, gt_body, gt_left, gt_right, POSE_CONNECTIONS, GT_POSE_CONNECTIONS, GT_HAND_CONNECTIONS)
-    cv2.imshow("frame"+str(frame_num).zfill(8), concat_image) 
-    plt.show()
-    
-    plt.clf()
-    plt.close()
-    cv2.destroyAllWindows() 
+    return out_body
 
-    frame_num += CAPTURE_RATE
 
-cv2.destroyAllWindows()
+"""
+-------------------------------------------------------------------------------------------------------
+"""
+# メイン処理部
+if __name__ == "__main__":
+    frame_num = FIRST_FRAME_NUM
+    while frame_num < END_FRAME_NUM:
+        # 正解データ呼び出し
+        gt_body, gt_left, gt_right = read_gt_landmarks(frame_num)
+        # 推定データ呼び出し
+        out_body = read_pd_landmarks(frame_num)
+        
+        # 画像、プロット表示
+        concat_image = concatenate_images(frame_num) # 比較しやすいように入力画像を連結
+        plot_3Dskeleton(out_body, gt_body, gt_left, gt_right, POSE_CONNECTIONS, GT_POSE_CONNECTIONS, GT_HAND_CONNECTIONS)
+        cv2.imshow("frame"+str(frame_num).zfill(8), concat_image) 
+        plt.show()
+        
+        plt.clf()
+        plt.close()
+        cv2.destroyAllWindows() 
+
+        frame_num += CAPTURE_RATE
+
+    cv2.destroyAllWindows()
