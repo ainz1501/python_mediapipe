@@ -7,6 +7,7 @@ import sys
 import json
 import glob
 import os
+import sympy as sp
 
 """
 MediaPipe Poseの高い信頼度をもつランドマーク精度を検証する

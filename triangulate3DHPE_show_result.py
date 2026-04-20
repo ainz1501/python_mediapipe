@@ -18,8 +18,8 @@ mp_drawing = mp.solutions.drawing_utils
 mp_pose = mp.solutions.pose
 
 # キャプチャーするフレーム
-CAPTURE_RATE = 100  
-FIRST_FRAME_NUM = 1737 # データセットに含まれるランドマークデータが137フレーム目以降からファイルが存在するため
+CAPTURE_RATE = 30  
+FIRST_FRAME_NUM = 5027 # データセットに含まれるランドマークデータが137フレーム目以降からファイルが存在するため
 """
 使用できないフレームについて
 下記のフレームは例外となるデータであるため、次のフレームをセットして再度プログラムを実行する．
@@ -49,10 +49,10 @@ R_right, T_right = np.array(param2["R"]), np.array(param2["t"])
 
 # パスまとめ
 TEMPORARY_IMAGES_STORAGE_PATH = "./output_images/images_temporary_storage/" # 一時的に画像を保存するフォルダのパス
-INPUT1_IMAGE_PATH = "./inputs/input_images/"+DATASET_NAME+"_cam"+str(VIDEO1_NUM).zfill(2)+"/"
-INPUT2_IMAGE_PATH = "./inputs/input_images/"+DATASET_NAME+"_cam"+str(VIDEO2_NUM).zfill(2)+"/"
-VIDEO_STORAGE_PATH = ".outputs/output_videos/"+DATASET_NAME+"_hdvideo"+str(VIDEO1_NUM).zfill(2)+str(VIDEO2_NUM).zfill(2)+"/"
-OUTPUT_LANDMARKS_PATH = "outputs/output_landmarks/"+DATASET_NAME+"_cam"+str(VIDEO1_NUM).zfill(2)+str(VIDEO2_NUM).zfill(2)+"/"
+INPUT1_IMAGE_PATH = "./sys_inputs/input_images/"+DATASET_NAME+"_cam"+str(VIDEO1_NUM).zfill(2)+"/"
+INPUT2_IMAGE_PATH = "./sys_inputs/input_images/"+DATASET_NAME+"_cam"+str(VIDEO2_NUM).zfill(2)+"/"
+VIDEO_STORAGE_PATH = "./sys_outputs/output_videos/"+DATASET_NAME+"_hdvideo"+str(VIDEO1_NUM).zfill(2)+str(VIDEO2_NUM).zfill(2)+"/"
+OUTPUT_LANDMARKS_PATH = "./sys_outputs/output_landmarks/"+DATASET_NAME+"_cam"+str(VIDEO1_NUM).zfill(2)+str(VIDEO2_NUM).zfill(2)+"/"
 
 # ボーン情報
 POSE_CONNECTIONS = mp_pose.POSE_CONNECTIONS
@@ -272,24 +272,30 @@ def read_pd_landmarks(frame_num):
 -------------------------------------------------------------------------------------------------------
 """
 # メイン処理部
+
 if __name__ == "__main__":
-    frame_num = FIRST_FRAME_NUM
-    while frame_num < END_FRAME_NUM:
-        # 正解データ呼び出し
-        gt_body, gt_left, gt_right = read_gt_landmarks(frame_num)
-        # 推定データ呼び出し
-        out_body = read_pd_landmarks(frame_num)
-        
-        # 画像、プロット表示
-        concat_image = concatenate_images(frame_num) # 比較しやすいように入力画像を連結
-        plot_3Dskeleton(out_body, gt_body, gt_left, gt_right, POSE_CONNECTIONS, GT_POSE_CONNECTIONS, GT_HAND_CONNECTIONS)
-        cv2.imshow("frame"+str(frame_num).zfill(8), concat_image) 
-        plt.show()
-        
-        plt.clf()
-        plt.close()
-        cv2.destroyAllWindows() 
+    try:
+        frame_num = FIRST_FRAME_NUM
+        while frame_num < END_FRAME_NUM:
+            # 正解データ呼び出し
+            gt_body, gt_left, gt_right = read_gt_landmarks(frame_num)
+            # 推定データ呼び出し
+            out_body = read_pd_landmarks(frame_num)
+            
+            # 画像、プロット表示
+            concat_image = concatenate_images(frame_num) # 比較しやすいように入力画像を連結
+            plot_3Dskeleton(out_body, gt_body, gt_left, gt_right, POSE_CONNECTIONS, GT_POSE_CONNECTIONS, GT_HAND_CONNECTIONS)
+            cv2.imshow("frame"+str(frame_num).zfill(8), concat_image) 
+            # plt.show()
+            
+            # plt.clf()
+            # plt.close()
+            key = cv2.waitKey(0)
+            if key == 27:  # ESCキーで終了
+                raise SystemExit("ユーザーがESCキーを押しました。プログラムを終了します。")
+            cv2.destroyAllWindows() 
 
-        frame_num += CAPTURE_RATE
+            frame_num += CAPTURE_RATE
 
-    cv2.destroyAllWindows()
+    finally:
+        cv2.destroyAllWindows()

@@ -37,21 +37,21 @@ JOINT_STYLE = mp_drawing.DrawingSpec(color=(255,0,0), thickness=5, circle_radius
 BONE_STYLE = mp_drawing.DrawingSpec(color=(200,200,0), thickness=5)
 mp_drawing._VISIBILITY_THRESHOLD = 0.0 # 画像に表示する際のランドマークの信用度閾値  
 
-"""
-Landmark_detect：2Dランドマークの推定
-Normalized_to_screen_coord：画像座標系への変換
-Matching_landmarks：閾値以上の信頼度をもつ対応ランドマークを特定するリストを作成
-Projection_mat_calc：透視投影行列の計算
-Triangulate_3Dpoint：三角測量を行う
-Triangulate3DHPE：上記の処理をまとめて関数化したもの
 
-annotate_image：元画像にMediaPipeが推定したランドマークを描画する
-plot_2Dskeleton：推定した2Dランドマークを2Dプロット上にそれぞれ描画する
-plot_3Dskeleton：推定した3Dランドマークを3Dプロット上に描画する
-set_equal_aspect：3Dプロットの各軸の幅を揃える
-concatenate_images：入力画像と注釈後の画像を連結する
-create_video_from_images：左右それぞれの比較用動画を作成
-"""
+# Landmark_detect：2Dランドマークの推定
+# Normalized_to_screen_coord：画像座標系への変換
+# Matching_landmarks：閾値以上の信頼度をもつ対応ランドマークを特定するリストを作成
+# Projection_mat_calc：透視投影行列の計算
+# Triangulate_3Dpoint：三角測量を行う
+# Triangulate3DHPE：上記の処理をまとめて関数化したもの
+
+# annotate_image：元画像にMediaPipeが推定したランドマークを描画する
+# plot_2Dskeleton：推定した2Dランドマークを2Dプロット上にそれぞれ描画する
+# plot_3Dskeleton：推定した3Dランドマークを3Dプロット上に描画する
+# set_equal_aspect：3Dプロットの各軸の幅を揃える
+# concatenate_images：入力画像と注釈後の画像を連結する
+# create_video_from_images：左右それぞれの比較用動画を作成
+
 # 処理関数
 def Landmark_detect(image_left, image_right):
     """
