@@ -13,6 +13,19 @@ from typing import List
 結果比較用プログラム
 入力画像2枚、3Dプロットを表示
 """
+    # if test_mode:
+    #     test_root = "./testIO"
+    #     inputs_root = os.path.join(test_root, "test_sys_inputs")
+    #     videos_root = os.path.join(test_root, "test_sys_outputs", "output_videos")
+    #     landmarks_root = os.path.join(test_root, "test_sys_outputs", "output_landmarks")
+    #     temp_storage_path = os.path.join(test_root, "test_sys_outputs", "images_temporary_storage")
+        
+    #     # Create test directories
+    #     os.makedirs(inputs_root, exist_ok=True)
+    #     os.makedirs(videos_root, exist_ok=True)
+    #     os.makedirs(landmarks_root, exist_ok=True)
+    #     os.makedirs(temp_storage_path, exist_ok=True)
+
 # MediaPipe Holisticモジュールを初期化
 mp_holistic = mp.solutions.holistic
 mp_drawing = mp.solutions.drawing_utils
@@ -166,6 +179,19 @@ def Landmark_detect(image_left, image_right):
     Parameters:
     image_left (MatLike)        : 左カメラの画像
     image_right (MatLike)       : 右カメラの画像
+
+    if test_mode:
+        test_root = ./testIO
+        inputs_root = os.path.join(test_root, test_sys_inputs)
+        videos_root = os.path.join(test_root, test_sys_outputs, output_videos)
+        landmarks_root = os.path.join(test_root, test_sys_outputs, output_landmarks)
+        temp_storage_path = os.path.join(test_root, test_sys_outputs, images_temporary_storage)
+        
+        # Create test directories
+        os.makedirs(inputs_root, exist_ok=True)
+        os.makedirs(videos_root, exist_ok=True)
+        os.makedirs(landmarks_root, exist_ok=True)
+        os.makedirs(temp_storage_path, exist_ok=True)
 
     Returns:
     result_left (MediaPipe独自クラス)   : 左画像の3Dポーズ
@@ -345,13 +371,14 @@ def annotate_image(image_L, landmarks_L, image_R, landmarks_R, connections, join
     cv2.imwrite(TEMPORARY_IMAGES_STORAGE_PATH+"original_L.png", image_L)
     cv2.imwrite(TEMPORARY_IMAGES_STORAGE_PATH+"original_R.png", image_R)
     # cv2.imshow("L original_image", original_images[0])
-    mp_drawing.draw_landmarks(image_L, landmarks_L, connections, 
-                            jointstyle, bonestyle)
-    mp_drawing.draw_landmarks(image_R, landmarks_R, connections, 
-                        jointstyle, bonestyle)  
+    mp_drawing.draw_landmarks(image_L, landmarks_L, connections, jointstyle, bonestyle)
+    mp_drawing.draw_landmarks(image_R, landmarks_R, connections, jointstyle, bonestyle)  
     cv2.imwrite(TEMPORARY_IMAGES_STORAGE_PATH+"annotated_L.png", image_L)
     cv2.imwrite(TEMPORARY_IMAGES_STORAGE_PATH+"annotated_R.png", image_R)
     # cv2.imshow("L annotated_image", annotated_images[0])
+    image_L_annotation = cv2.imread(TEMPORARY_IMAGES_STORAGE_PATH+"annotated_L.png")
+    image_R_annotation = cv2.imread(TEMPORARY_IMAGES_STORAGE_PATH+"annotated_R.png")
+    return image_L_annotation, image_R_annotation
 
 def plot_2Dskeleton(landmarks, connection):
     x_coords = []
@@ -588,6 +615,7 @@ def run_triangulate3dhpe_data(
     videos_root: str = DEFAULT_VIDEOS_ROOT,
     landmarks_root: str = DEFAULT_LANDMARKS_ROOT,
     temp_storage_path: str = DEFAULT_TEMPORARY_IMAGES_STORAGE_PATH,
+    test_mode: bool = False,
 ) -> List[int]:
     """
     指定した設定でMediaPipeを用いた3Dランドマーク推定と保存を実行する。
@@ -616,6 +644,8 @@ def run_triangulate3dhpe_data(
         ランドマーク推定結果を保存するルートパス。
     temp_storage_path : str
         中間生成物を保存するパス。
+    test_mode : bool
+        Trueの場合、testIOフォルダ構造を使用。
 
     Returns
     -------

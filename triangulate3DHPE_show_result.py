@@ -7,6 +7,7 @@ import sys
 import json
 import glob
 import os
+import triangulate3DHPE as hpe
 
 """
 結果比較用プログラム
@@ -19,7 +20,7 @@ mp_pose = mp.solutions.pose
 
 # キャプチャーするフレーム
 CAPTURE_RATE = 30  
-FIRST_FRAME_NUM = 5027 # データセットに含まれるランドマークデータが137フレーム目以降からファイルが存在するため
+FIRST_FRAME_NUM = 137 # データセットに含まれるランドマークデータが137フレーム目以降からファイルが存在するため
 """
 使用できないフレームについて
 下記のフレームは例外となるデータであるため、次のフレームをセットして再度プログラムを実行する．
@@ -94,6 +95,9 @@ def annotate_image(image_L, landmarks_L, image_R, landmarks_R, connections, join
     cv2.imwrite(TEMPORARY_IMAGES_STORAGE_PATH+"annotated_L.png", image_L)
     cv2.imwrite(TEMPORARY_IMAGES_STORAGE_PATH+"annotated_R.png", image_R)
     # cv2.imshow("L annotated_image", annotated_images[0])
+    image_L_annotation = cv2.imread(TEMPORARY_IMAGES_STORAGE_PATH+"annotated_L.png")
+    image_R_annotation = cv2.imread(TEMPORARY_IMAGES_STORAGE_PATH+"annotated_R.png")
+    return image_L_annotation, image_R_annotation
 
 def plot_2Dskeleton(landmarks, connection):
     x_coords = []
@@ -116,7 +120,7 @@ def plot_2Dskeleton(landmarks, connection):
         
     plt.gca().invert_yaxis()  # Y座標を反転して画像と一致させる
     plt.axis('equal')         # アスペクト比を正確にする
-    fig.savefig()
+    plt.savefig()
     plt.show()
 
 def plot_3Dskeleton(output_landmarks, gt_landmarks, gt_left, gt_right, output_connections, gt_connections, gt_hand_connections):
@@ -187,12 +191,17 @@ def set_equal_aspect(ax):
      # ボックスアスペクト比を均等に設定 (バージョン 3.4+)
     ax.set_box_aspect([1, 1, 1])  # x, y, z を同じスケールに
 
-def concatenate_images(frame_num):
+def concatenate_images(frame_num, annotationFlag = False):
     # 入力フレームの読み込み
     image1 = cv2.imread(INPUT1_IMAGE_PATH+"frame"+str(frame_num).zfill(8)+".png")
     image2 = cv2.imread(INPUT2_IMAGE_PATH+"frame"+str(frame_num).zfill(8)+".png")
 
     # 画像を横に連結
+    if annotationFlag:
+        image1Landmark, image2Landmark = hpe.Landmark_detect(image1, image2)
+        image1, image2 = annotate_image(image1, image1Landmark.pose_landmarks, image2, image2Landmark.pose_landmarks, 
+                                        POSE_CONNECTIONS, JOINT_STYLE, BONE_STYLE)
+
     concatenation_image = cv2.hconcat([image2, image1])
 
     return concatenation_image
@@ -272,7 +281,6 @@ def read_pd_landmarks(frame_num):
 -------------------------------------------------------------------------------------------------------
 """
 # メイン処理部
-
 if __name__ == "__main__":
     try:
         frame_num = FIRST_FRAME_NUM
@@ -283,7 +291,7 @@ if __name__ == "__main__":
             out_body = read_pd_landmarks(frame_num)
             
             # 画像、プロット表示
-            concat_image = concatenate_images(frame_num) # 比較しやすいように入力画像を連結
+            concat_image = concatenate_images(frame_num, True) # 比較しやすいように入力画像を連結
             plot_3Dskeleton(out_body, gt_body, gt_left, gt_right, POSE_CONNECTIONS, GT_POSE_CONNECTIONS, GT_HAND_CONNECTIONS)
             cv2.imshow("frame"+str(frame_num).zfill(8), concat_image) 
             # plt.show()
