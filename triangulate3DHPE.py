@@ -1,13 +1,38 @@
+"""
+MediaPipe と CMU Panoptic Dataset のカメラパラメータを使って、2枚の画像から
+人体ランドマークの3D座標を三角測量するためのユーティリティモジュール。
+
+主な使い方:
+    camera = Load_camera_parameters()
+    result_left, result_right, points3d = Triangulate3DHPE(
+        img_left,
+        img_right,
+        camera["K_left"],
+        camera["R_left"],
+        camera["T_left"],
+        camera["K_right"],
+        camera["R_right"],
+        camera["T_right"],
+    )
+
+OpenCV 画像は BGR、MediaPipe 入力は内部で RGB に変換する。
+3Dランドマークは原則として shape が (N, 3) の numpy.ndarray で扱う。
+"""
+
 import cv2
-import mediapipe as mp
-import matplotlib.pyplot as plt
 import numpy as np
 from datetime import datetime 
 import sys
 import json
 import glob
 import os
-from typing import List
+from typing import Any, List, Optional, Sequence
+
+ImageArray = np.ndarray
+Landmark2DArray = np.ndarray
+Landmark3DArray = np.ndarray
+CameraParameterDict = dict[str, Any]
+PanopticPathDict = dict[str, str]
 
 """
 結果比較用プログラム
@@ -26,29 +51,34 @@ from typing import List
     #     os.makedirs(landmarks_root, exist_ok=True)
     #     os.makedirs(temp_storage_path, exist_ok=True)
 
-# MediaPipe Holisticモジュールを初期化
-mp_holistic = mp.solutions.holistic
-mp_drawing = mp.solutions.drawing_utils
-mp_pose = mp.solutions.pose
-
 # デフォルト設定値
-DEFAULT_CAPTURE_RATE = 100
-# データセットに含まれるランドマークデータが137フレーム目以降からファイルが存在するため
-DEFAULT_FIRST_FRAME_NUM = 137
-DEFAULT_DATASET_NAME = "171204_pose3"
-DEFAULT_VIDEO1_NUM = 18
-DEFAULT_VIDEO2_NUM = 23
-DEFAULT_END_FRAME_NUM = 9056
-# 一時的に画像を保存するフォルダのパス
-DEFAULT_TEMPORARY_IMAGES_STORAGE_PATH = "./output_images/images_temporary_storage/"
-DEFAULT_PANOPTIC_ROOT = "./panoptic-toolbox"
-DEFAULT_INPUTS_ROOT = "./sys_inputs/input_images"
-DEFAULT_VIDEOS_ROOT = "./sys_outputs/output_videos"
-DEFAULT_LANDMARKS_ROOT = "./sys_outputs/output_landmarks"
-TEMPORARY_IMAGES_STORAGE_PATH = DEFAULT_TEMPORARY_IMAGES_STORAGE_PATH
+#: フレームを何枚おきに処理するかを示すデフォルト値。
+DEFAULT_CAPTURE_RATE: int = 100
+#: Panoptic Dataset のランドマーク JSON が存在し始めるデフォルトフレーム番号。
+DEFAULT_FIRST_FRAME_NUM: int = 137
+#: デフォルトで使用する Panoptic Dataset のシーケンス名。
+DEFAULT_DATASET_NAME: str = "171204_pose3"
+#: デフォルトの左カメラ番号。`hd_00_18.mp4` に対応する。
+DEFAULT_VIDEO1_NUM: int = 18
+#: デフォルトの右カメラ番号。`hd_00_23.mp4` に対応する。
+DEFAULT_VIDEO2_NUM: int = 23
+#: デフォルトの処理終了フレーム番号。この値は処理対象に含まない。
+DEFAULT_END_FRAME_NUM: int = 9056
+#: 注釈画像などの一時ファイルを保存するデフォルトディレクトリ。
+DEFAULT_TEMPORARY_IMAGES_STORAGE_PATH: str = "./output_images/images_temporary_storage/"
+#: Panoptic Dataset が置かれているデフォルトのルートディレクトリ。
+DEFAULT_PANOPTIC_ROOT: str = "./panoptic-toolbox"
+#: 抽出した入力画像を保存するデフォルトのルートディレクトリ。
+DEFAULT_INPUTS_ROOT: str = "./sys_inputs/input_images"
+#: 比較用動画を保存するデフォルトのルートディレクトリ。
+DEFAULT_VIDEOS_ROOT: str = "./sys_outputs/output_videos"
+#: 推定ランドマーク JSON を保存するデフォルトのルートディレクトリ。
+DEFAULT_LANDMARKS_ROOT: str = "./sys_outputs/output_landmarks"
+TEMPORARY_IMAGES_STORAGE_PATH: str = DEFAULT_TEMPORARY_IMAGES_STORAGE_PATH
 
 # 別データ間で同じ箇所を示す対応ランドマーク番号リスト[正解データ, 推定データ]
-BODY_MAP = [[1, 0],    # Nose
+#: Body の `[GTランドマーク番号, MediaPipeランドマーク番号]` 対応表。
+BODY_MAP: list[list[int]] = [[1, 0],    # Nose
     [3, 11],   # Left Shoulder
     [4, 13],   # Left Elbow
     [5, 15],   # Left Wrist
@@ -67,12 +97,14 @@ BODY_MAP = [[1, 0],    # Nose
     [18, 8],   # Right Ear
     ]
 
-RIGHT_HAND_MAP = [[0, 16],  # Wrist
+#: 右手の `[GTランドマーク番号, MediaPipeランドマーク番号]` 対応表。
+RIGHT_HAND_MAP: list[list[int]] = [[0, 16],  # Wrist
             [17, 18],   # pinky
             [5, 20],    # index
             [2, 22]]    # thumb
 
-LEFT_HAND_MAP = [[0,15],    # Wrist
+#: 左手の `[GTランドマーク番号, MediaPipeランドマーク番号]` 対応表。
+LEFT_HAND_MAP: list[list[int]] = [[0,15],    # Wrist
                  [17, 17],  # pinky
                  [5, 19],   # index
                  [2, 21]]   # thumb
@@ -121,8 +153,8 @@ mp (MediaPipe Pose)
 """
 
 # キャプチャーするフレーム
-CAPTURE_RATE = 100  
-FIRST_FRAME_NUM = 837 # データセットに含まれるランドマークデータが137フレーム目以降からファイルが存在するため
+CAPTURE_RATE: int = 100
+FIRST_FRAME_NUM: int = 837 # データセットに含まれるランドマークデータが137フレーム目以降からファイルが存在するため
 """
 使用できないフレームについて
 下記のフレームは例外となるデータであるため、次のフレームをセットして再度プログラムを実行する．
@@ -131,94 +163,390 @@ FIRST_FRAME_NUM = 837 # データセットに含まれるランドマークデ�
 """
 
 # 使用データ指定
-DATASET_NAME = "171204_pose3"
-GT_DATA_FOLDER_PATH = "./panoptic-toolbox/"+DATASET_NAME+"/hdPose3d_stage1_coco19/"
-GT_HAND_DATA_FOLDER_PATH = "./panoptic-toolbox/"+DATASET_NAME+"/hdHand3d/"
-VIDEO1_NUM = 18
-VIDEO2_NUM = 23
-END_FRAME_NUM = 9056
-
-# キャリブレーションファイルオープン
-with open("./panoptic-toolbox/"+DATASET_NAME+"/calibration_"+DATASET_NAME+".json") as calibration_file:
-    parameters = json.load(calibration_file)
-print("cam_params:", not(parameters is None))
-# 内部パラメータ、外部パラメータ
-param1 = parameters["cameras"][479+VIDEO1_NUM] # HDカメラ00_00 [479]
-param2 = parameters["cameras"][479+VIDEO2_NUM]
-K_left = np.array(param1["K"])
-R_left, T_left = np.array(param1["R"]), np.array(param1["t"])
-K_right = np.array(param2["K"])
-R_right, T_right = np.array(param2["R"]), np.array(param2["t"])
+DATASET_NAME: str = "171204_pose3"
+GT_DATA_FOLDER_PATH: str = "./panoptic-toolbox/"+DATASET_NAME+"/hdPose3d_stage1_coco19/"
+GT_HAND_DATA_FOLDER_PATH: str = "./panoptic-toolbox/"+DATASET_NAME+"/hdHand3d/"
+VIDEO1_NUM: int = 18
+VIDEO2_NUM: int = 23
+END_FRAME_NUM: int = 9056
 
 # パスまとめ
-TEMPORARY_IMAGES_STORAGE_PATH = "./output_images/images_temporary_storage/" # 一時的に画像を保存するフォルダのパス
-INPUT1_IMAGE_PATH = "./inputs/input_images/"+DATASET_NAME+"_cam"+str(VIDEO1_NUM).zfill(2)+"/"
-INPUT2_IMAGE_PATH = "./inputs/input_images/"+DATASET_NAME+"_cam"+str(VIDEO2_NUM).zfill(2)+"/"
-VIDEO_STORAGE_PATH = ".outputs/output_videos/"+DATASET_NAME+"_hdvideo"+str(VIDEO1_NUM).zfill(2)+str(VIDEO2_NUM).zfill(2)+"/"
-OUTPUT_LANDMARKS_PATH = "sys_outputs/output_landmarks/"+DATASET_NAME+"_cam"+str(VIDEO1_NUM).zfill(2)+str(VIDEO2_NUM).zfill(2)+"/"
+TEMPORARY_IMAGES_STORAGE_PATH: str = "./output_images/images_temporary_storage/" # 一時的に画像を保存するフォルダのパス
+INPUT1_IMAGE_PATH: str = "./inputs/input_images/"+DATASET_NAME+"_cam"+str(VIDEO1_NUM).zfill(2)+"/"
+INPUT2_IMAGE_PATH: str = "./inputs/input_images/"+DATASET_NAME+"_cam"+str(VIDEO2_NUM).zfill(2)+"/"
+VIDEO_STORAGE_PATH: str = ".outputs/output_videos/"+DATASET_NAME+"_hdvideo"+str(VIDEO1_NUM).zfill(2)+str(VIDEO2_NUM).zfill(2)+"/"
+OUTPUT_LANDMARKS_PATH: str = "sys_outputs/output_landmarks/"+DATASET_NAME+"_cam"+str(VIDEO1_NUM).zfill(2)+str(VIDEO2_NUM).zfill(2)+"/"
+
+_CAMERA_PARAM_CACHE = {}
+_LAZY_CAMERA_ATTRS = {
+    "parameters",
+    "param1",
+    "param2",
+    "K_left",
+    "R_left",
+    "T_left",
+    "K_right",
+    "R_right",
+    "T_right",
+}
+_LAZY_MEDIAPIPE_ATTRS = {
+    "mp_holistic",
+    "mp_drawing",
+    "mp_pose",
+    "POSE_CONNECTIONS",
+    "JOINT_STYLE",
+    "BONE_STYLE",
+}
+
+
+def _Get_mediapipe():
+    import mediapipe as mp
+
+    return mp
+
+
+def _Get_holistic():
+    return _Get_mediapipe().solutions.holistic
+
+
+def _Get_drawing():
+    mp_drawing = _Get_mediapipe().solutions.drawing_utils
+    mp_drawing._VISIBILITY_THRESHOLD = 0.0
+    return mp_drawing
+
+
+def _Get_pose():
+    return _Get_mediapipe().solutions.pose
+
+
+def _Get_pyplot():
+    import matplotlib.pyplot as plt
+
+    return plt
+
+
+def Build_panoptic_paths(
+    dataset_name: str = DEFAULT_DATASET_NAME,
+    video1_num: int = DEFAULT_VIDEO1_NUM,
+    video2_num: int = DEFAULT_VIDEO2_NUM,
+    panoptic_root: str = DEFAULT_PANOPTIC_ROOT,
+    inputs_root: str = DEFAULT_INPUTS_ROOT,
+    videos_root: str = DEFAULT_VIDEOS_ROOT,
+    landmarks_root: str = DEFAULT_LANDMARKS_ROOT,
+) -> PanopticPathDict:
+    """
+    Panoptic Dataset のディレクトリ構造から、このモジュールで使うパスをまとめて生成する。
+
+    Args:
+        dataset_name: 使用する Panoptic Dataset のシーケンス名。例: `"171204_pose3"`。
+        video1_num: 左カメラとして扱う HD カメラ番号。`18` なら `hd_00_18.mp4`。
+        video2_num: 右カメラとして扱う HD カメラ番号。`23` なら `hd_00_23.mp4`。
+        panoptic_root: Panoptic Dataset のルートディレクトリ。
+        inputs_root: 抽出した入力画像を保存するルートディレクトリ。
+        videos_root: 比較用動画を保存するルートディレクトリ。
+        landmarks_root: 推定ランドマーク JSON を保存するルートディレクトリ。
+
+    Returns:
+        `video1_path`, `video2_path`, `calibration_path`,
+        `input1_image_path`, `output_landmarks_path` などを含むパス辞書。
+
+    Notes:
+        ファイルの存在確認や読み込みは行わない。import 時の副作用を避けるため、
+        実際に必要になったタイミングで呼び出す。
+    """
+    dataset_root = os.path.join(panoptic_root, dataset_name)
+    video1_suffix = str(video1_num).zfill(2)
+    video2_suffix = str(video2_num).zfill(2)
+
+    return {
+        "dataset_root": dataset_root,
+        "video1_path": os.path.join(dataset_root, "hdVideos", f"hd_00_{video1_suffix}.mp4"),
+        "video2_path": os.path.join(dataset_root, "hdVideos", f"hd_00_{video2_suffix}.mp4"),
+        "calibration_path": os.path.join(dataset_root, f"calibration_{dataset_name}.json"),
+        "gt_body_folder": os.path.join(dataset_root, "hdPose3d_stage1_coco19"),
+        "gt_hand_folder": os.path.join(dataset_root, "hdHand3d"),
+        "input1_image_path": os.path.join(inputs_root, f"{dataset_name}_cam{video1_suffix}"),
+        "input2_image_path": os.path.join(inputs_root, f"{dataset_name}_cam{video2_suffix}"),
+        "video_storage_path": os.path.join(videos_root, f"{dataset_name}_hdvideo{video1_suffix}{video2_suffix}"),
+        "output_landmarks_path": os.path.join(landmarks_root, f"{dataset_name}_cam{video1_suffix}{video2_suffix}"),
+    }
+
+
+def Load_calibration_parameters(calibration_path: str) -> dict[str, Any]:
+    """
+    Panoptic Dataset のキャリブレーション JSON を読み込む。
+
+    Args:
+        calibration_path: `calibration_<dataset_name>.json` へのパス。
+
+    Returns:
+        JSON を `dict` として読み込んだもの。`"cameras"` キーを含む想定。
+
+    Raises:
+        FileNotFoundError: `calibration_path` が存在しない場合。
+    """
+    if not os.path.exists(calibration_path):
+        raise FileNotFoundError(f"キャリブレーションファイルが見つかりません: {calibration_path}")
+
+    with open(calibration_path) as calibration_file:
+        return json.load(calibration_file)
+
+
+def Load_camera_parameters(
+    dataset_name: str = DEFAULT_DATASET_NAME,
+    video1_num: int = DEFAULT_VIDEO1_NUM,
+    video2_num: int = DEFAULT_VIDEO2_NUM,
+    panoptic_root: str = DEFAULT_PANOPTIC_ROOT,
+    calibration_path: Optional[str] = None,
+) -> CameraParameterDict:
+    """
+    左右カメラの内部・外部パラメータを読み込む。
+
+    Args:
+        dataset_name: 使用する Panoptic Dataset のシーケンス名。
+        video1_num: 左カメラとして扱う HD カメラ番号。
+        video2_num: 右カメラとして扱う HD カメラ番号。
+        panoptic_root: Panoptic Dataset のルートディレクトリ。
+        calibration_path: キャリブレーション JSON を直接指定する場合のパス。
+            `None` の場合は `dataset_name` と `panoptic_root` から生成する。
+
+    Returns:
+        次のキーを含む辞書。
+        `parameters`: 読み込んだキャリブレーション JSON 全体。
+        `param1`, `param2`: 左右カメラの元 JSON パラメータ。
+        `K_left`, `K_right`: shape `(3, 3)` の内部パラメータ行列。
+        `R_left`, `R_right`: shape `(3, 3)` の回転行列。
+        `T_left`, `T_right`: shape `(3, 1)` 相当の並進ベクトル。
+
+    Notes:
+        同じ `calibration_path`, `video1_num`, `video2_num` の組み合わせは
+        メモリ上にキャッシュする。
+    """
+    if calibration_path is None:
+        paths = Build_panoptic_paths(
+            dataset_name=dataset_name,
+            video1_num=video1_num,
+            video2_num=video2_num,
+            panoptic_root=panoptic_root,
+        )
+        calibration_path = paths["calibration_path"]
+
+    cache_key = (calibration_path, video1_num, video2_num)
+    if cache_key in _CAMERA_PARAM_CACHE:
+        return _CAMERA_PARAM_CACHE[cache_key]
+
+    loaded_parameters = Load_calibration_parameters(calibration_path)
+    left_param = loaded_parameters["cameras"][479 + video1_num]
+    right_param = loaded_parameters["cameras"][479 + video2_num]
+    camera_params = {
+        "parameters": loaded_parameters,
+        "param1": left_param,
+        "param2": right_param,
+        "K_left": np.asarray(left_param["K"]),
+        "R_left": np.asarray(left_param["R"]),
+        "T_left": np.asarray(left_param["t"]),
+        "K_right": np.asarray(right_param["K"]),
+        "R_right": np.asarray(right_param["R"]),
+        "T_right": np.asarray(right_param["t"]),
+    }
+    _CAMERA_PARAM_CACHE[cache_key] = camera_params
+    return camera_params
+
+
+def __getattr__(name: str) -> Any:
+    """
+    既存コードの `hpe.K_left` などを壊しにくくするための互換レイヤー。
+    import 時には読み込まず、属性参照時だけデフォルト設定のカメラパラメータをロードする。
+    """
+    if name in _LAZY_CAMERA_ATTRS:
+        return Load_camera_parameters()[name]
+    if name == "mp_holistic":
+        return _Get_holistic()
+    if name == "mp_drawing":
+        return _Get_drawing()
+    if name == "mp_pose":
+        return _Get_pose()
+    if name == "POSE_CONNECTIONS":
+        return _Get_pose().POSE_CONNECTIONS
+    if name == "JOINT_STYLE":
+        return _Get_drawing().DrawingSpec(color=(255,0,0), thickness=5, circle_radius=3)
+    if name == "BONE_STYLE":
+        return _Get_drawing().DrawingSpec(color=(200,200,0), thickness=5)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def Estimate_fundamental_matrix_raw(
+    points_left: Landmark2DArray,
+    points_right: Landmark2DArray,
+) -> np.ndarray:
+    """
+    非正規化・rank補正なしの8点アルゴリズムで基礎行列 `F` を推定する。
+
+    Args:
+        points_left: 左画像の対応点。shape `(N, 2)`、`N >= 8`。
+        points_right: 右画像の対応点。shape `(N, 2)`、`N >= 8`。
+
+    Returns:
+        shape `(3, 3)` の未補正基礎行列 `F`。
+
+    Notes:
+        実装本体は `eight_point_pose.Estimate_fundamental_matrix_raw`。
+        2D点の正規化と `rank(F) = 2` 補正は行わない。
+    """
+    from eight_point_pose import Estimate_fundamental_matrix_raw as _estimate
+
+    return _estimate(points_left, points_right)
+
+
+def Estimate_essential_matrix_raw(
+    points_left: Landmark2DArray,
+    points_right: Landmark2DArray,
+    K_left: np.ndarray,
+    K_right: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    未補正の基礎行列から本質行列 `E = K_right.T @ F @ K_left` を求める。
+
+    Args:
+        points_left: 左画像の対応点。shape `(N, 2)`。
+        points_right: 右画像の対応点。shape `(N, 2)`。
+        K_left: 左カメラの内部パラメータ。shape `(3, 3)`。
+        K_right: 右カメラの内部パラメータ。shape `(3, 3)`。
+
+    Returns:
+        `(E, F)`。
+        `E` は特異値補正なしの本質行列、`F` は rank補正なしの基礎行列。
+    """
+    from eight_point_pose import Estimate_essential_matrix_raw as _estimate
+
+    return _estimate(points_left, points_right, K_left, K_right)
+
+
+def Decompose_essential_matrix_raw(E: np.ndarray) -> list[tuple[np.ndarray, np.ndarray]]:
+    """
+    特異値補正なしの本質行列から4通りの `(R, t)` 候補を作る。
+
+    Args:
+        E: shape `(3, 3)` の本質行列。
+
+    Returns:
+        `(R, t)` 候補のリスト。`R` は shape `(3, 3)`、`t` は shape `(3,)`。
+    """
+    from eight_point_pose import Decompose_essential_matrix_raw as _decompose
+
+    return _decompose(E)
+
+
+def Estimate_relative_pose_eight_point_raw(
+    points_left: Landmark2DArray,
+    points_right: Landmark2DArray,
+    K_left: np.ndarray,
+    K_right: np.ndarray,
+) -> dict[str, Any]:
+    """
+    非正規化・補正なし8点アルゴリズムで左右カメラの相対姿勢を推定する。
+
+    Args:
+        points_left: 左画像の対応点。shape `(N, 2)`、`N >= 8`。
+        points_right: 右画像の対応点。shape `(N, 2)`、`N >= 8`。
+        K_left: 左カメラの内部パラメータ。shape `(3, 3)`。
+        K_right: 右カメラの内部パラメータ。shape `(3, 3)`。
+
+    Returns:
+        `R`, `t`, `E`, `F`, `points3d`, `positive_depth_count` などを含む辞書。
+        比較用に `F_rank`, `E_singular_values`, `det_R`,
+        `rotation_orthogonality_error` も含む。
+
+    Notes:
+        2D点の正規化、`F` の rank 2 補正、`E` の特異値補正は行わない。
+    """
+    from eight_point_pose import Estimate_relative_pose_eight_point_raw as _estimate
+
+    return _estimate(points_left, points_right, K_left, K_right)
+
+
+def Estimate_external_parameters_eight_point_raw(
+    points_left: Landmark2DArray,
+    points_right: Landmark2DArray,
+    K_left: np.ndarray,
+    K_right: np.ndarray,
+) -> dict[str, Any]:
+    """
+    `Estimate_relative_pose_eight_point_raw` の用途名を明確にした別名。
+
+    Returns:
+        外部パラメータ相当の相対姿勢 `R`, `t` と診断情報を含む辞書。
+    """
+    return Estimate_relative_pose_eight_point_raw(points_left, points_right, K_left, K_right)
+
 
 # ボーン情報
-POSE_CONNECTIONS = mp_pose.POSE_CONNECTIONS
-GT_POSE_CONNECTIONS = np.array([[1,2],[1,4],[4,5],[5,6],[1,3],[3,7],[7,8],[8,9],[3,13],[13,14],[14,15],[1,10],[10,11],[11,12]])-1
-GT_HAND_CONNECTIONS = np.array([[1,2],[2,3],[3,4],[4,5],
+#: Panoptic body GT を描画するときのボーン接続。shape `(14, 2)`。
+GT_POSE_CONNECTIONS: np.ndarray = np.array([[1,2],[1,4],[4,5],[5,6],[1,3],[3,7],[7,8],[8,9],[3,13],[13,14],[14,15],[1,10],[10,11],[11,12]])-1
+#: Panoptic hand GT を描画するときのボーン接続。shape `(20, 2)`。
+GT_HAND_CONNECTIONS: np.ndarray = np.array([[1,2],[2,3],[3,4],[4,5],
                                 [1,6],[6,7],[7,8],[8,9],
                                 [1,10],[10,11],[11,12],[12,13],
                                 [1,14],[14,15],[15,16],[16,17],
                                 [1,18],[18,19],[19,20],[20,21]])-1
 
-# レンダリング情報
-JOINT_STYLE = mp_drawing.DrawingSpec(color=(255,0,0), thickness=5, circle_radius=3)
-BONE_STYLE = mp_drawing.DrawingSpec(color=(200,200,0), thickness=5)
-mp_drawing._VISIBILITY_THRESHOLD = 0.0 # 画像に表示する際のランドマークの信用度閾値 
-
 # 処理関数
-def Landmark_detect(image_left, image_right):
+def Landmark_detect(image_left: ImageArray, image_right: ImageArray) -> tuple[Any, Any]:
     """
-    左右画像それぞれの対象の手、顔、全身の3Dポーズを推定する
+    左右画像から MediaPipe Holistic のランドマークを検出する。
 
-    Parameters:
-    image_left (MatLike)        : 左カメラの画像
-    image_right (MatLike)       : 右カメラの画像
-
-    if test_mode:
-        test_root = ./testIO
-        inputs_root = os.path.join(test_root, test_sys_inputs)
-        videos_root = os.path.join(test_root, test_sys_outputs, output_videos)
-        landmarks_root = os.path.join(test_root, test_sys_outputs, output_landmarks)
-        temp_storage_path = os.path.join(test_root, test_sys_outputs, images_temporary_storage)
-        
-        # Create test directories
-        os.makedirs(inputs_root, exist_ok=True)
-        os.makedirs(videos_root, exist_ok=True)
-        os.makedirs(landmarks_root, exist_ok=True)
-        os.makedirs(temp_storage_path, exist_ok=True)
+    Args:
+        image_left: 左カメラ画像。OpenCV で読み込んだ BGR 配列、shape は `(H, W, 3)`。
+        image_right: 右カメラ画像。OpenCV で読み込んだ BGR 配列、shape は `(H, W, 3)`。
 
     Returns:
-    result_left (MediaPipe独自クラス)   : 左画像の3Dポーズ
-    result_right (MediaPipe独自クラス)  : 右画像の3Dポーズ
+        `(result_left, result_right)` のタプル。
+        各要素は MediaPipe Holistic の結果オブジェクトで、
+        `pose_landmarks`, `left_hand_landmarks`, `right_hand_landmarks`,
+        `face_landmarks` などを参照できる。
+
+    Raises:
+        ValueError: 左右どちらかの画像が `None` の場合。
+
+    Notes:
+        入力は BGR を想定し、関数内で RGB に変換してから MediaPipe に渡す。
     """
+    if image_left is None or image_right is None:
+        raise ValueError("入力画像が None です。左右両方の BGR 画像を指定してください。")
+
     # RGBスケールに変換
     image_leftRGB = cv2.cvtColor(image_left, cv2.COLOR_BGR2RGB)
     image_rightRGB = cv2.cvtColor(image_right, cv2.COLOR_BGR2RGB)
 
     # ランドマーク推定 静止画入力 -> static_image_mode=True
+    mp_holistic = _Get_holistic()
     with mp_holistic.Holistic(static_image_mode=True) as holistic:
         result_left = holistic.process(image_leftRGB)
         result_right = holistic.process(image_rightRGB)
 
     return result_left, result_right
 
-def Normalized_to_screen_coord(result_L, result_R, width, height):
+def Normalized_to_screen_coord(
+    result_L: Any,
+    result_R: Any,
+    width: int,
+    height: int,
+) -> tuple[Landmark2DArray, Landmark2DArray]:
     """
-    左右画像で推定したランドマークを画像座標系（スクリーン座標系）の値に変換する
+    MediaPipe の正規化ランドマークを画像座標系の `(x, y)` に変換する。
 
-    Parameters:
-    result (NamedTuple)   : 推定したランドマークのリスト。.landmark.x各ランドマークのx座標の値を取り出せる
-    width (int)           : 画像の幅
-    height (int)          : 画像の高さ
+    Args:
+        result_L: 左画像のランドマークリスト。`.landmark` を持つ MediaPipe オブジェクト。
+        result_R: 右画像のランドマークリスト。`.landmark` を持つ MediaPipe オブジェクト。
+        width: 入力画像の幅。正規化 x 座標に掛ける。
+        height: 入力画像の高さ。正規化 y 座標に掛ける。
 
     Returns:
-    scr_landmarks (numpy.ndarray)   : n行2列の画像座標系ランドマーク (全身なのでn=33)
+        `(scr_landmarks_L, scr_landmarks_R)`。
+        どちらも shape `(N, 2)` の `numpy.ndarray` で、各行は `[x, y]`。
+
+    Notes:
+        `pose_landmarks` を渡した場合、通常 `N=33` になる。
     """
     scr_list_L = [] # カメラ座標を記録する配列を生成
     scr_list_R = []
@@ -243,20 +571,35 @@ def Normalized_to_screen_coord(result_L, result_R, width, height):
 
     return scr_landmarks_L, scr_landmarks_R
 
-def Matching_landmarks(landmark_left, landmark_right, enable):
+def Matching_landmarks(
+    landmark_left: Any,
+    landmark_right: Any,
+    enable: bool,
+    verbose: bool = False,
+) -> list[int]:
     """
-    左右の対応するランドマークの信頼度から、信頼度の低いランドマークを含むペアを弾くためのリストを生成する処理
+    左右ランドマークの visibility を使って、有効な対応点を示すリストを作る。
 
-    Parameter:
-    landmark_left (NamedTuple)  : 推定した左画像のランドマーク。.landmark.visiblity で推定したランドマークに対する信頼度を取り出せる
-    landmark_right (NamedTuple) : 推定した右画像のランドマーク
+    Args:
+        landmark_left: 左画像の MediaPipe ランドマーク。各点に `.visibility` がある想定。
+        landmark_right: 右画像の MediaPipe ランドマーク。各点に `.visibility` がある想定。
+        enable: `True` の場合、左右どちらも visibility が閾値を超える点だけ `1` にする。
+            `False` の場合、すべての点を `1` として扱う。
+        verbose: `True` の場合、各ランドマークの visibility を標準出力に表示する。
+
+    Returns:
+        各ランドマークが有効なら `1`、無効なら `0` のリスト。
+
+    Notes:
+        現在の閾値は `0.80`。
     """
     # 閾値
     visibility_threshold = 0.80  # 80%以上
     matching_list = []
     if enable:
         for l, r in zip(landmark_left.landmark, landmark_right.landmark):
-            print("left visiblity:",l.visibility, " ", "right visiblity:", r.visibility)
+            if verbose:
+                print("left visiblity:",l.visibility, " ", "right visiblity:", r.visibility)
             if l.visibility > visibility_threshold and r.visibility > visibility_threshold:
                 matching_list.append(1)
             else:
@@ -268,18 +611,28 @@ def Matching_landmarks(landmark_left, landmark_right, enable):
 
     return matching_list
 
-def Projection_mat_calc(K_left, R_left, T_left, K_right, R_right, T_right):
+def Projection_mat_calc(
+    K_left: np.ndarray,
+    R_left: np.ndarray,
+    T_left: np.ndarray,
+    K_right: np.ndarray,
+    R_right: np.ndarray,
+    T_right: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
     """
-    左右カメラの投影行列を生成する
+    左右カメラの投影行列 `P = K [R|t]` を生成する。
 
-    Parameters:
-    K (numpy.ndarray)       : 3行3列のカメラパラメータ
-    R (numpy.ndarray)       : 3行3列の回転行列
-    t (numpy.ndarray)       : 3行1列の並進ベクトル
+    Args:
+        K_left: 左カメラの内部パラメータ行列。shape `(3, 3)`。
+        R_left: 左カメラの回転行列。shape `(3, 3)`。
+        T_left: 左カメラの並進ベクトル。shape `(3, 1)` または `(3,)` 相当。
+        K_right: 右カメラの内部パラメータ行列。shape `(3, 3)`。
+        R_right: 右カメラの回転行列。shape `(3, 3)`。
+        T_right: 右カメラの並進ベクトル。shape `(3, 1)` または `(3,)` 相当。
 
     Returns:
-    Pleft (numpy.ndarray)   : 左画像のカメラ投影行列 (3*4)
-    Pright (numpy.ndarray)  : 右画像のカメラ投影行列 (3*4)
+        `(Pleft, Pright)`。
+        どちらも shape `(3, 4)` の投影行列。
     """
     
     
@@ -289,19 +642,29 @@ def Projection_mat_calc(K_left, R_left, T_left, K_right, R_right, T_right):
 
     return Pleft, Pright
 
-def Triangulate_3Dpoint(Pleft, Pright, landmark_left, landmark_right):
+def Triangulate_3Dpoint(
+    Pleft: np.ndarray,
+    Pright: np.ndarray,
+    landmark_left: Landmark2DArray,
+    landmark_right: Landmark2DArray,
+) -> Landmark3DArray:
     """
-    カメラの投影行列を使用して特徴点の3D位置を再構築する
+    左右画像の対応する2D点から3D点を三角測量する。
 
-    Parameters:
-    Pleft (numpy.ndarray)           : 左画像のカメラ投影行列 (3*4)
-    Pright (numpy.ndarray)          : 右画像のカメラ投影行列 (3*4)
-    landmark_left (numpy.ndarray)   : n行2列の左画像のランドマーク（画像座標系）
-    landmark_right (numpy.ndarray)  : n行2列右画像のランドマーク（画像座標系）(全身なのでn=33)
-    matches (list of int)           : 画像間で対応するランドマークの有無を示すリスト
+    Args:
+        Pleft: 左カメラの投影行列。shape `(3, 4)`。
+        Pright: 右カメラの投影行列。shape `(3, 4)`。
+        landmark_left: 左画像の2Dランドマーク。shape `(N, 2)`、各行は `[x, y]`。
+        landmark_right: 右画像の2Dランドマーク。shape `(N, 2)`、各行は `[x, y]`。
 
     Returns:
-    points3D.T (numpy.ndarray)        : 再構築された33行3列の3Dポイントの配列の転置行列
+        三角測量された3Dランドマーク。shape `(N, 3)`。
+
+    Raises:
+        ValueError: 左右ランドマークの shape が違う場合、または `(N, 2)` ではない場合。
+
+    Notes:
+        `cv2.triangulatePoints` を使うため、左右の点は同じ順序で対応している必要がある。
     """
     # マッチングされた特徴点を取得
     # left_list = []
@@ -313,6 +676,13 @@ def Triangulate_3Dpoint(Pleft, Pright, landmark_left, landmark_right):
     # left_pts = np.array(left_list).T
     # right_pts = np.array(right_list).T
     
+    landmark_left = np.asarray(landmark_left, dtype=float)
+    landmark_right = np.asarray(landmark_right, dtype=float)
+    if landmark_left.shape != landmark_right.shape:
+        raise ValueError(f"左右ランドマークの形状が一致しません: {landmark_left.shape} != {landmark_right.shape}")
+    if landmark_left.ndim != 2 or landmark_left.shape[1] != 2:
+        raise ValueError(f"ランドマークは (N, 2) の配列で指定してください: {landmark_left.shape}")
+
     # 特徴点の3D位置を再構築　（4行n列）
     points4D = cv2.triangulatePoints(Pleft, Pright, landmark_left.T, landmark_right.T)
     
@@ -328,59 +698,125 @@ def Triangulate_3Dpoint(Pleft, Pright, landmark_left, landmark_right):
 
     return points3D.T 
 
-def Triangulate3DHPE(img1, img2, K_l, R_l, T_l, K_r, R_r, T_r):
+def Triangulate3DHPE(
+    img1: ImageArray,
+    img2: ImageArray,
+    K_l: np.ndarray,
+    R_l: np.ndarray,
+    T_l: np.ndarray,
+    K_r: np.ndarray,
+    R_r: np.ndarray,
+    T_r: np.ndarray,
+    verbose: bool = False,
+) -> tuple[Any, Any, Landmark3DArray]:
+    """
+    左右画像から MediaPipe Pose を検出し、全身33点の3D座標を推定する。
+
+    Args:
+        img1: 左カメラ画像。OpenCV BGR 配列、shape `(H, W, 3)`。
+        img2: 右カメラ画像。OpenCV BGR 配列、shape `(H, W, 3)`。
+        K_l: 左カメラの内部パラメータ。shape `(3, 3)`。
+        R_l: 左カメラの回転行列。shape `(3, 3)`。
+        T_l: 左カメラの並進ベクトル。shape `(3, 1)` または `(3,)` 相当。
+        K_r: 右カメラの内部パラメータ。shape `(3, 3)`。
+        R_r: 右カメラの回転行列。shape `(3, 3)`。
+        T_r: 右カメラの並進ベクトル。shape `(3, 1)` または `(3,)` 相当。
+        verbose: `True` の場合、2D/3Dランドマークなどのデバッグ情報を表示する。
+
+    Returns:
+        `(result_left, result_right, landmark3D)`。
+        `result_left` と `result_right` は MediaPipe Holistic の結果オブジェクト。
+        `landmark3D` は shape `(33, 3)` の `numpy.ndarray`。
+        人物を検出できない場合は shape `(0, 3)` の空配列。
+    """
     # 高さ、幅（同じカメラを用いるため片方の画像から取得）
     HEIGHT, WIDTH, _ = img1.shape
 
     # ランドマーク、マッチングリスト
     result_left, result_right = Landmark_detect(image_left=img1, image_right=img2)
 
-    if result_left.pose_landmarks == None or result_right.pose_landmarks == None:
-        print("Enter no human!")
-        landmark3D = []
+    if result_left.pose_landmarks is None or result_right.pose_landmarks is None:
+        if verbose:
+            print("Enter no human!")
+        landmark3D = np.empty((0, 3))
     else:
         # 画像座標系への変換(同時に体のランドマークのみ使用)
         pose_left, pose_right = Normalized_to_screen_coord(result_left.pose_landmarks, result_right.pose_landmarks, WIDTH, HEIGHT)
-        print("left=","\n",pose_left)
-        print("right=","\n",pose_right)
+        if verbose:
+            print("left=","\n",pose_left)
+            print("right=","\n",pose_right)
 
         # 投影行列を計算
         Pleft, Pright = Projection_mat_calc(K_l, R_l, T_l, K_r, R_r, T_r)
 
         # 3次元位置を復元
         landmark3D = Triangulate_3Dpoint(Pleft, Pright, pose_left, pose_right)
-        print("landmark3D:","\n",landmark3D)
+        if verbose:
+            print("landmark3D:","\n",landmark3D)
 
     return result_left, result_right, landmark3D
 # 結果表示用関数
-def annotate_image(image_L, landmarks_L, image_R, landmarks_R, connections, jointstyle, bonestyle):
+def annotate_image(
+    image_L: ImageArray,
+    landmarks_L: Any,
+    image_R: ImageArray,
+    landmarks_R: Any,
+    connections: Any,
+    jointstyle: Any,
+    bonestyle: Any,
+    temp_storage_path: str = TEMPORARY_IMAGES_STORAGE_PATH,
+) -> tuple[ImageArray, ImageArray]:
     """
-    mediapipeが推定したランドマークを画像に描画する関数
+    MediaPipe のランドマークを左右画像へ描画し、注釈済み画像を返す。
 
-    Parameters:
-    image (MatLike)                         : 描画する画像
-    landmarks (NamedTuple)                  : 推定したランドマークのリスト。
-    connections (List of List of int)       : ランドマークを繋ぐボーンの連結情報。連結する2つのランドマークの数字がリスト化されている
-    jointstyle (mp_drawing.DrawingSpec)     : ランドマークを示す点の描写情報
-    bonestyle (mp_drawing.DrawingSpec)      : ランドマークを繋ぐ線の描写情報
+    Args:
+        image_L: 左カメラ画像。OpenCV BGR 配列。
+        landmarks_L: 左画像の MediaPipe ランドマーク。例: `result_left.pose_landmarks`。
+        image_R: 右カメラ画像。OpenCV BGR 配列。
+        landmarks_R: 右画像の MediaPipe ランドマーク。例: `result_right.pose_landmarks`。
+        connections: 描画するボーン接続情報。例: `POSE_CONNECTIONS`。
+        jointstyle: ランドマーク点の描画スタイル。例: `JOINT_STYLE`。
+        bonestyle: ボーン線の描画スタイル。例: `BONE_STYLE`。
+        temp_storage_path: 元画像・注釈画像を一時保存するディレクトリ。
 
-    Return:
-    original_images (list of MatLike)  : 注釈前の元の画像 (0:左カメラ画像, 1:右カメラ画像)
-    annotated_images (list of MatLike) : 注釈後の画像
+    Returns:
+        `(image_L_annotation, image_R_annotation)`。
+        どちらもランドマーク描画後の OpenCV BGR 画像。
+
+    Notes:
+        互換性維持のため一時 PNG を保存してから読み戻す実装になっている。
     """
-    cv2.imwrite(TEMPORARY_IMAGES_STORAGE_PATH+"original_L.png", image_L)
-    cv2.imwrite(TEMPORARY_IMAGES_STORAGE_PATH+"original_R.png", image_R)
+    os.makedirs(temp_storage_path, exist_ok=True)
+    original_left_path = os.path.join(temp_storage_path, "original_L.png")
+    original_right_path = os.path.join(temp_storage_path, "original_R.png")
+    annotated_left_path = os.path.join(temp_storage_path, "annotated_L.png")
+    annotated_right_path = os.path.join(temp_storage_path, "annotated_R.png")
+
+    cv2.imwrite(original_left_path, image_L)
+    cv2.imwrite(original_right_path, image_R)
     # cv2.imshow("L original_image", original_images[0])
+    mp_drawing = _Get_drawing()
     mp_drawing.draw_landmarks(image_L, landmarks_L, connections, jointstyle, bonestyle)
     mp_drawing.draw_landmarks(image_R, landmarks_R, connections, jointstyle, bonestyle)  
-    cv2.imwrite(TEMPORARY_IMAGES_STORAGE_PATH+"annotated_L.png", image_L)
-    cv2.imwrite(TEMPORARY_IMAGES_STORAGE_PATH+"annotated_R.png", image_R)
+    cv2.imwrite(annotated_left_path, image_L)
+    cv2.imwrite(annotated_right_path, image_R)
     # cv2.imshow("L annotated_image", annotated_images[0])
-    image_L_annotation = cv2.imread(TEMPORARY_IMAGES_STORAGE_PATH+"annotated_L.png")
-    image_R_annotation = cv2.imread(TEMPORARY_IMAGES_STORAGE_PATH+"annotated_R.png")
+    image_L_annotation = cv2.imread(annotated_left_path)
+    image_R_annotation = cv2.imread(annotated_right_path)
     return image_L_annotation, image_R_annotation
 
-def plot_2Dskeleton(landmarks, connection):
+def plot_2Dskeleton(landmarks: Landmark2DArray, connection: Sequence[Sequence[int]]) -> None:
+    """
+    2Dランドマークとボーン接続を Matplotlib で表示する。
+
+    Args:
+        landmarks: 画像座標系の2Dランドマーク。shape `(N, 2)`。
+        connection: 接続するランドマーク番号のペア。例: `[[0, 1], [1, 2]]`。
+
+    Returns:
+        なし。Matplotlib のウィンドウを表示する。
+    """
+    plt = _Get_pyplot()
     x_coords = []
     y_coords = []
     fig = plt.figure()
@@ -407,7 +843,33 @@ def plot_2Dskeleton(landmarks, connection):
     plt.show()
     cv2.destroyAllWindows()
 
-def plot_3Dskeleton(frame_num, output_landmarks, gt_landmarks, gt_left, gt_right, output_connections, gt_connections, gt_hand_connections):
+def plot_3Dskeleton(
+    frame_num: int,
+    output_landmarks: Landmark3DArray,
+    gt_landmarks: np.ndarray,
+    gt_left: np.ndarray,
+    gt_right: np.ndarray,
+    output_connections: Sequence[Sequence[int]],
+    gt_connections: Sequence[Sequence[int]],
+    gt_hand_connections: Sequence[Sequence[int]],
+) -> tuple[Any, Any]:
+    """
+    推定3Dランドマークと GT ランドマークを同じ3Dプロットに描画する。
+
+    Args:
+        frame_num: 表示対象のフレーム番号。
+        output_landmarks: 推定された MediaPipe 3Dランドマーク。shape `(33, 3)`。
+        gt_landmarks: GT の body ランドマーク。shape `(19, 3)` または `(19, 4)`。
+        gt_left: GT の左手ランドマーク。shape `(21, 3)`。
+        gt_right: GT の右手ランドマーク。shape `(21, 3)`。
+        output_connections: 推定ランドマーク用の接続ペア。
+        gt_connections: GT body 用の接続ペア。
+        gt_hand_connections: GT hand 用の接続ペア。
+
+    Returns:
+        `(fig, ax)`。Matplotlib の Figure と 3D Axes。
+    """
+    plt = _Get_pyplot()
     fig = plt.figure(figsize = (8, 8))
     ax= fig.add_subplot(111, projection='3d')
     
@@ -455,7 +917,16 @@ def plot_3Dskeleton(frame_num, output_landmarks, gt_landmarks, gt_left, gt_right
     return fig, ax
 
 # プロットの軸を等間隔にする
-def set_equal_aspect(ax):
+def set_equal_aspect(ax: Any) -> None:
+    """
+    Matplotlib の3D軸で x, y, z の表示スケールを揃える。
+
+    Args:
+        ax: Matplotlib の 3D Axes。
+
+    Returns:
+        なし。`ax` を直接変更する。
+    """
     limits = np.array([
         ax.get_xlim3d(),
         ax.get_ylim3d(),
@@ -475,17 +946,58 @@ def set_equal_aspect(ax):
      # ボックスアスペクト比を均等に設定 (バージョン 3.4+)
     ax.set_box_aspect([1, 1, 1])  # x, y, z を同じスケールに
 
-def concatenate_images(frame_num):
+def concatenate_images(
+    frame_num: int,
+    input1_image_path: str = INPUT1_IMAGE_PATH,
+    input2_image_path: str = INPUT2_IMAGE_PATH,
+) -> ImageArray:
+    """
+    指定フレームの左右画像を読み込み、横方向に連結する。
+
+    Args:
+        frame_num: 読み込むフレーム番号。ファイル名は `frameXXXXXXXX.png`。
+        input1_image_path: 左画像が保存されているディレクトリ。
+        input2_image_path: 右画像が保存されているディレクトリ。
+
+    Returns:
+        `cv2.hconcat([image2, image1])` で連結した OpenCV BGR 画像。
+
+    Raises:
+        FileNotFoundError: 左右どちらかの画像を読み込めない場合。
+    """
     # 入力フレームの読み込み
-    image1 = cv2.imread(INPUT1_IMAGE_PATH+"frame"+str(frame_num).zfill(8)+".png")
-    image2 = cv2.imread(INPUT2_IMAGE_PATH+"frame"+str(frame_num).zfill(8)+".png")
+    image1 = cv2.imread(os.path.join(input1_image_path, "frame"+str(frame_num).zfill(8)+".png"))
+    image2 = cv2.imread(os.path.join(input2_image_path, "frame"+str(frame_num).zfill(8)+".png"))
+
+    if image1 is None or image2 is None:
+        raise FileNotFoundError(f"連結する画像を読み込めませんでした: frame {frame_num}")
 
     # 画像を横に連結
     concatenation_image = cv2.hconcat([image2, image1])
 
     return concatenation_image
 
-def create_video_from_images(concatenation_left, concatenation_right, frame_rate, save_path):
+def create_video_from_images(
+    concatenation_left: Sequence[ImageArray],
+    concatenation_right: Sequence[ImageArray],
+    frame_rate: int,
+    save_path: str,
+) -> None:
+    """
+    画像列から左右比較用の MP4 動画を作成する。
+
+    Args:
+        concatenation_left: 左側出力動画に書き込む画像列。
+        concatenation_right: 右側出力動画に書き込む画像列。
+        frame_rate: 出力動画の fps。
+        save_path: `output_left_video.mp4` と `output_right_video.mp4` を保存するディレクトリ。
+
+    Returns:
+        なし。動画ファイルを `save_path` に保存する。
+
+    Raises:
+        ValueError: 書き込む画像がない場合。
+    """
     # 左カメラ各フレームの比較用画像読み込み
     frames_left = []
     for img in concatenation_left:
@@ -500,46 +1012,61 @@ def create_video_from_images(concatenation_left, concatenation_right, frame_rate
             break
         frames_right.append(img)
 
-    HEIGHT, WIDTH, _ = frames_left[0].shape
-    out_Lvideo = cv2.VideoWriter(save_path+"output_left_video.mp4", cv2.VideoWriter_fourcc(*"mp4v"), frame_rate, (WIDTH, HEIGHT))
-    out_Rvideo = cv2.VideoWriter(save_path+"output_right_video.mp4", cv2.VideoWriter_fourcc(*"mp4v"), frame_rate, (WIDTH, HEIGHT)) 
+    if len(frames_left) == 0 or len(frames_right) == 0:
+        raise ValueError("動画化する画像がありません。")
 
-    for i in range(len(frames_left)):
-        out_Lvideo.write(frames_left[i])
-        out_Rvideo.write(frames_right[i])
+    os.makedirs(save_path, exist_ok=True)
+    HEIGHT, WIDTH, _ = frames_left[0].shape
+    out_Lvideo = cv2.VideoWriter(os.path.join(save_path, "output_left_video.mp4"), cv2.VideoWriter_fourcc(*"mp4v"), frame_rate, (WIDTH, HEIGHT))
+    out_Rvideo = cv2.VideoWriter(os.path.join(save_path, "output_right_video.mp4"), cv2.VideoWriter_fourcc(*"mp4v"), frame_rate, (WIDTH, HEIGHT))
+
+    try:
+        for i in range(len(frames_left)):
+            out_Lvideo.write(frames_left[i])
+            out_Rvideo.write(frames_right[i])
+    finally:
+        out_Lvideo.release()
+        out_Rvideo.release()
 # create_video_from_images(storage_path=FRAMES_STORAGE_PATH)
 
 # 集計関数
-def compute_mpjpe(predicted, ground_truth):
+def compute_mpjpe(predicted: Landmark3DArray, ground_truth: Landmark3DArray) -> float:
     """
-    MPJPE (Mean Per Joint Position Error) を計算する関数。
+    MPJPE (Mean Per Joint Position Error) を計算する。
 
-    Parameters:
-        predicted (np.ndarray): 予測された3D関節位置 (N, 3)
-        ground_truth (np.ndarray): GTの3D関節位置 (N, 3)
+    Args:
+        predicted: 予測された3D関節位置。shape `(N, 3)`。
+        ground_truth: GT の3D関節位置。shape `(N, 3)`。
 
     Returns:
-        float: MPJPE値（mm単位を想定）
+        各関節のユークリッド距離の平均値。座標が mm なら戻り値も mm。
+
+    Raises:
+        AssertionError: `predicted` と `ground_truth` の shape が一致しない場合。
     """
     assert predicted.shape == ground_truth.shape, "形状が一致しません"
     errors = np.linalg.norm(predicted - ground_truth, axis=1)
     mpjpe = np.mean(errors)
     return mpjpe
 
-def make_compe_landmarks(ground_truth, predicted, compe_map, confidence:float = -1.0):
+def make_compe_landmarks(
+    ground_truth: np.ndarray,
+    predicted: Landmark3DArray,
+    compe_map: Sequence[Sequence[int]],
+    confidence: float = -1.0,
+) -> tuple[np.ndarray, Landmark3DArray]:
     """
-    同じ箇所を推定したランドマークを抽出し、各ランドマークを出力する操作
-    GTランドマークの信頼度が閾値を下回っているならそのペアを除く
+    GT と推定値から、同じ身体部位に対応するランドマークだけを抽出する。
 
-    Parameters:
-        predicted (np.ndarray): 予測された3D関節位置 (N, 3)
-        ground_truth (np.ndarray): GTの3D関節位置 (N, 3)
-        compe_map (np.ndarray): 対応ランドマークのペアマップ (M, 2)
-        confidence (float): 信頼度の閾値
+    Args:
+        ground_truth: GT ランドマーク。shape `(N, 4)` を想定し、4列目を信頼度として使う。
+        predicted: 推定3Dランドマーク。shape `(M, 3)`。
+        compe_map: `[gt_index, predicted_index]` の対応表。
+        confidence: GT の信頼度閾値。この値以下の GT ランドマークは除外する。
 
     Returns:
-        compe_predicted (np.ndarray): 抽出した予測3D関節位置 (N, 3)
-        compe_ground_truth (np.ndarray): 抽出したGTの3D関節位置 (N, 3)
+        `(compe_ground_truth, compe_predicted)`。
+        `compe_ground_truth` は抽出後の GT 配列、`compe_predicted` は抽出後の推定配列。
     """
 
     compe_predicted = []
@@ -557,21 +1084,46 @@ def make_compe_landmarks(ground_truth, predicted, compe_map, confidence:float = 
 
     return np.array(compe_ground_truth), np.array(compe_predicted)
 
-def read_gt_landmarks(frame_num):
+def read_gt_landmarks(
+    frame_num: int,
+    gt_body_folder: str = GT_DATA_FOLDER_PATH,
+    gt_hand_folder: str = GT_HAND_DATA_FOLDER_PATH,
+    verbose: bool = False,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    指定フレームの Panoptic GT body/hand ランドマークを読み込む。
+
+    Args:
+        frame_num: 読み込むフレーム番号。
+        gt_body_folder: `body3DScene_XXXXXXXX.json` があるディレクトリ。
+        gt_hand_folder: `handRecon3D_hdXXXXXXXX.json` があるディレクトリ。
+        verbose: `True` の場合、JSON 読み込み結果を標準出力に表示する。
+
+    Returns:
+        `(gt_body, gt_left, gt_right)`。
+        `gt_body` は shape `(19, 4)` の body ランドマーク。
+        `gt_left`, `gt_right` は shape `(21, 3)` の手ランドマーク。
+        データがない場合はゼロ配列を返す。
+    """
     # 正解データ呼び出し
-    with open(GT_DATA_FOLDER_PATH+"body3DScene_"+str(frame_num).zfill(8)+".json") as gt: # ボディ
+    body_path = os.path.join(gt_body_folder, "body3DScene_"+str(frame_num).zfill(8)+".json")
+    hand_path = os.path.join(gt_hand_folder, "handRecon3D_hd"+str(frame_num).zfill(8)+".json")
+
+    with open(body_path) as gt: # ボディ
         ground_truth_file = gt
         gt_frame = json.load(ground_truth_file)
-        print(not(gt_frame is None))
+        if verbose:
+            print(not(gt_frame is None))
     # (x,y,z,c)の19行4列の配列を作成
     if len(gt_frame['bodies']) == 0:
         gt_body = np.zeros((19, 4))
     else:
         gt_body = np.array(gt_frame['bodies'][0]['joints19']).reshape(-1, 4)
-    with open(GT_HAND_DATA_FOLDER_PATH+"handRecon3D_hd"+str(frame_num).zfill(8)+".json") as gt: # 両手
+    with open(hand_path) as gt: # 両手
         ground_truth_file = gt
         gt_frame = json.load(ground_truth_file)
-        print(not(gt_frame is None))
+        if verbose:
+            print(not(gt_frame is None))
     # (x,y,z)の21行3列の配列を作成 'landmarks'の長さが63であり、手のランドマークは21個であることから想定
     if len(gt_frame['people']) == 0:
         gt_left = np.zeros((21, 3))
@@ -588,11 +1140,29 @@ def read_gt_landmarks(frame_num):
     
     return gt_body, gt_left, gt_right
 
-def read_pd_landmarks(frame_num):
+def read_pd_landmarks(
+    frame_num: int,
+    prediction_folder: str = OUTPUT_LANDMARKS_PATH,
+    verbose: bool = False,
+) -> Landmark3DArray:
+    """
+    指定フレームの推定ランドマーク JSON を読み込む。
+
+    Args:
+        frame_num: 読み込むフレーム番号。
+        prediction_folder: `frame_XXXXXXXX.json` があるディレクトリ。
+        verbose: `True` の場合、JSON 読み込み結果を標準出力に表示する。
+
+    Returns:
+        shape `(33, 3)` の推定3Dランドマーク。
+        JSON の `"landmarks"` が `null` の場合はゼロ配列を返す。
+    """
     # 推定ランドマーク呼び出し
-    with open(OUTPUT_LANDMARKS_PATH+"frame_"+str(frame_num).zfill(8)+".json") as out:
+    pred_path = os.path.join(prediction_folder, "frame_"+str(frame_num).zfill(8)+".json")
+    with open(pred_path) as out:
         out_frame_data = json.load(out)
-        print(not(out_frame_data is None))
+        if verbose:
+            print(not(out_frame_data is None))
     # (x,y,z)の33行3列の配列を作成
     if out_frame_data['landmarks'] == None:
         out_body = np.zeros((33, 3))
@@ -616,79 +1186,82 @@ def run_triangulate3dhpe_data(
     landmarks_root: str = DEFAULT_LANDMARKS_ROOT,
     temp_storage_path: str = DEFAULT_TEMPORARY_IMAGES_STORAGE_PATH,
     test_mode: bool = False,
+    verbose: bool = False,
 ) -> List[int]:
     """
-    指定した設定でMediaPipeを用いた3Dランドマーク推定と保存を実行する。
+    Panoptic 動画からフレームを読み込み、3Dランドマーク推定結果を JSON に保存する。
 
-    Parameters
-    ----------
-    dataset_name : str
-        使用するデータセット名。
-    video1_num : int
-        左カメラの番号。
-    video2_num : int
-        右カメラの番号。
-    capture_rate : int
-        フレームのサンプリング間隔。
-    first_frame_num : int
-        推定を始めるフレーム番号。
-    end_frame_num : int
-        推定を終了するフレーム番号（未満まで処理）。
-    panoptic_root : str
-        Panopticデータセットが保存されているルートパス。
-    inputs_root : str
-        入力画像を保存するルートパス。
-    videos_root : str
-        比較用動画を保存するルートパス。
-    landmarks_root : str
-        ランドマーク推定結果を保存するルートパス。
-    temp_storage_path : str
-        中間生成物を保存するパス。
-    test_mode : bool
-        Trueの場合、testIOフォルダ構造を使用。
+    Args:
+        dataset_name: 使用する Panoptic Dataset のシーケンス名。
+        video1_num: 左カメラとして扱う HD カメラ番号。
+        video2_num: 右カメラとして扱う HD カメラ番号。
+        capture_rate: 何フレームごとに処理するか。例: `30` なら30フレーム間隔。
+        first_frame_num: 処理開始フレーム番号。
+        end_frame_num: 処理終了フレーム番号。この値は処理対象に含まない。
+        panoptic_root: Panoptic Dataset のルートディレクトリ。
+        inputs_root: 抽出した入力画像を保存するルートディレクトリ。
+        videos_root: 比較用動画を保存するルートディレクトリ。
+        landmarks_root: 推定ランドマーク JSON を保存するルートディレクトリ。
+        temp_storage_path: 中間画像を保存するディレクトリ。
+        test_mode: `True` の場合、`./testIO` 配下のテスト用ディレクトリ構造を使う。
+        verbose: `True` の場合、処理中のフレーム番号などを標準出力に表示する。
 
-    Returns
-    -------
-    List[int]
-        推定結果を保存したフレーム番号のリスト。
+    Returns:
+        推定結果 JSON を保存したフレーム番号のリスト。
+
+    Output JSON:
+        各フレームを `frame_XXXXXXXX.json` として保存する。
+        形式は `{"frame": frame_num, "landmarks": {"0": [x, y, z], ...}}`。
+        人物未検出時は `"landmarks": null`。
+
+    Raises:
+        FileNotFoundError: 動画またはキャリブレーション JSON を開けない場合。
     """
-    # パス生成
-    dataset_root = os.path.join(panoptic_root, dataset_name)
-    video1_path = os.path.join(dataset_root, "hdVideos", f"hd_00_{str(video1_num).zfill(2)}.mp4")
-    video2_path = os.path.join(dataset_root, "hdVideos", f"hd_00_{str(video2_num).zfill(2)}.mp4")
-    calibration_path = os.path.join(dataset_root, f"calibration_{dataset_name}.json")
+    if test_mode:
+        test_root = "./testIO"
+        inputs_root = os.path.join(test_root, "test_sys_inputs")
+        videos_root = os.path.join(test_root, "test_sys_outputs", "output_videos")
+        landmarks_root = os.path.join(test_root, "test_sys_outputs", "output_landmarks")
+        temp_storage_path = os.path.join(test_root, "test_sys_outputs", "images_temporary_storage")
 
-    input1_image_path = os.path.join(inputs_root, f"{dataset_name}_cam{str(video1_num).zfill(2)}")
-    input2_image_path = os.path.join(inputs_root, f"{dataset_name}_cam{str(video2_num).zfill(2)}")
-    video_storage_path = os.path.join(videos_root, f"{dataset_name}_hdvideo{str(video1_num).zfill(2)}{str(video2_num).zfill(2)}")
-    output_landmarks_path = os.path.join(landmarks_root, f"{dataset_name}_cam{str(video1_num).zfill(2)}{str(video2_num).zfill(2)}")
+    paths = Build_panoptic_paths(
+        dataset_name=dataset_name,
+        video1_num=video1_num,
+        video2_num=video2_num,
+        panoptic_root=panoptic_root,
+        inputs_root=inputs_root,
+        videos_root=videos_root,
+        landmarks_root=landmarks_root,
+    )
 
     # フォルダ生成
-    os.makedirs(video_storage_path, exist_ok=True)
-    os.makedirs(input1_image_path, exist_ok=True)
-    os.makedirs(input2_image_path, exist_ok=True)
-    os.makedirs(output_landmarks_path, exist_ok=True)
+    os.makedirs(paths["video_storage_path"], exist_ok=True)
+    os.makedirs(paths["input1_image_path"], exist_ok=True)
+    os.makedirs(paths["input2_image_path"], exist_ok=True)
+    os.makedirs(paths["output_landmarks_path"], exist_ok=True)
     os.makedirs(temp_storage_path, exist_ok=True)
 
     # キャリブレーションファイルをロード
-    with open(calibration_path) as calibration_file:
-        parameters = json.load(calibration_file)
-    print("cam_params:", parameters is not None)
+    camera_params = Load_camera_parameters(
+        dataset_name=dataset_name,
+        video1_num=video1_num,
+        video2_num=video2_num,
+        panoptic_root=panoptic_root,
+        calibration_path=paths["calibration_path"],
+    )
+    if verbose:
+        print("cam_params:", camera_params["parameters"] is not None)
 
-    param1 = parameters["cameras"][479 + video1_num] # カメラ1
-    param2 = parameters["cameras"][479 + video2_num] # カメラ2
-    K_left = np.array(param1["K"]) # カメラ1カメラパラメータ
-    R_left, T_left = np.array(param1["R"]), np.array(param1["t"]) # カメラ1外部パラメータ
-    K_right = np.array(param2["K"]) # カメラ2カメラパラメータ
-    R_right, T_right = np.array(param2["R"]), np.array(param2["t"]) # カメラ2外部パラメータ
-
-    video1 = cv2.VideoCapture(video1_path) # カメラ1動画
-    video2 = cv2.VideoCapture(video2_path) # カメラ2動画
+    video1 = cv2.VideoCapture(paths["video1_path"]) # カメラ1動画
+    video2 = cv2.VideoCapture(paths["video2_path"]) # カメラ2動画
 
     if not video1.isOpened() or not video2.isOpened():
         video1.release()
         video2.release()
-        raise FileNotFoundError("指定した動画ファイルを開けませんでした。パスを確認してください。")
+        raise FileNotFoundError(
+            "指定した動画ファイルを開けませんでした。"
+            f" video1={paths['video1_path']}, video2={paths['video2_path']}"
+        )
 
     processed_frames: List[int] = []
     frame_num = first_frame_num
@@ -697,28 +1270,41 @@ def run_triangulate3dhpe_data(
         while frame_num < end_frame_num:
             video1.set(cv2.CAP_PROP_POS_FRAMES, frame_num - 1)
             video2.set(cv2.CAP_PROP_POS_FRAMES, frame_num - 1)
-            print("now frame:" + str(video1.get(cv2.CAP_PROP_POS_FRAMES)))
+            if verbose:
+                print("now frame:" + str(video1.get(cv2.CAP_PROP_POS_FRAMES)))
 
             ret1, img1 = video1.read()
             ret2, img2 = video2.read()
-            print("now frame:" + str(video1.get(cv2.CAP_PROP_POS_FRAMES)))
+            if verbose:
+                print("now frame:" + str(video1.get(cv2.CAP_PROP_POS_FRAMES)))
 
             if not (ret1 and ret2):
-                print("breaked frame:", frame_num)
+                if verbose:
+                    print("breaked frame:", frame_num)
                 break
 
-            cv2.imwrite(os.path.join(input1_image_path, f"frame{frame_num:08d}.png"), img1)
-            cv2.imwrite(os.path.join(input2_image_path, f"frame{frame_num:08d}.png"), img2)
+            cv2.imwrite(os.path.join(paths["input1_image_path"], f"frame{frame_num:08d}.png"), img1)
+            cv2.imwrite(os.path.join(paths["input2_image_path"], f"frame{frame_num:08d}.png"), img2)
 
-            _, _, landmarks = Triangulate3DHPE(img1, img2, K_left, R_left, T_left, K_right, R_right, T_right)
+            _, _, landmarks = Triangulate3DHPE(
+                img1,
+                img2,
+                camera_params["K_left"],
+                camera_params["R_left"],
+                camera_params["T_left"],
+                camera_params["K_right"],
+                camera_params["R_right"],
+                camera_params["T_right"],
+                verbose=verbose,
+            )
 
             landmark_dict = None
-            if len(landmarks) != 0:
+            if landmarks is not None and len(landmarks) != 0:
                 landmark_dict = {str(idx): [float(landmark[0]), float(landmark[1]), float(landmark[2])]
                                  for idx, landmark in enumerate(landmarks)}
 
             result = {"frame": frame_num, "landmarks": landmark_dict}
-            with open(os.path.join(output_landmarks_path, f"frame_{frame_num:08d}.json"), "w") as f:
+            with open(os.path.join(paths["output_landmarks_path"], f"frame_{frame_num:08d}.json"), "w") as f:
                 json.dump(result, f, indent=2)
 
             processed_frames.append(frame_num)
@@ -727,7 +1313,8 @@ def run_triangulate3dhpe_data(
         video1.release()
         video2.release()
 
-    print("finish!!")
+    if verbose:
+        print("finish!!")
     return processed_frames    
 
 def run_mpjpe_evaluation(
@@ -741,25 +1328,28 @@ def run_mpjpe_evaluation(
     left_hand_map: list[list[int]] = LEFT_HAND_MAP,
     right_hand_map: list[list[int]] = RIGHT_HAND_MAP,
     confidence_threshold: float = 0.0,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """
-    trianguate3DHPE_compute_mpjpe copy.py のメイン処理（全身・左右手・ホリスティックの MPJPE 計測）を
-    関数化したラッパー。指定フレームの範囲で GT と推定値を読み込み、MPJPE をフレームごとに計算して返す。
+    保存済み推定ランドマークと Panoptic GT から MPJPE をフレームごとに計算する。
 
-    Returns
-    -------
-    list[dict]
-        各フレームの計算結果をまとめた辞書のリスト。
-        例:
-        {
-            "frame": 8437,
-            "body_mpjpe": 42.18,
-            "left_hand_mpjpe": 35.72,
-            "right_hand_mpjpe": 37.01,
-            "holistic_mpjpe": 39.85,
-            "status": "ok"
-        }
-        読み込み失敗や GT 欠落時は `status` に "missing_gt" / "missing_prediction" などが入る。
+    Args:
+        first_frame: 評価開始フレーム番号。
+        end_frame: 評価終了フレーム番号。この値は評価対象に含まない。
+        capture_rate: 何フレームごとに評価するか。
+        gt_body_folder: GT body JSON があるディレクトリ。
+        gt_hand_folder: GT hand JSON があるディレクトリ。
+        prediction_folder: 推定ランドマーク JSON があるディレクトリ。
+        body_map: body の `[gt_index, predicted_index]` 対応表。
+        left_hand_map: 左手の `[gt_index, predicted_index]` 対応表。
+        right_hand_map: 右手の `[gt_index, predicted_index]` 対応表。
+        confidence_threshold: GT ランドマークの信頼度閾値。
+
+    Returns:
+        各フレームの評価結果の辞書リスト。
+        正常時は `body_mpjpe`, `left_hand_mpjpe`, `right_hand_mpjpe`,
+        `holistic_mpjpe`, `status` などを含む。
+        読み込み失敗時は `status` に `missing_gt_body`,
+        `missing_gt_hand`, `missing_prediction` などが入る。
     """
     results: list[dict] = []
     frame_num = first_frame
@@ -884,4 +1474,3 @@ if __name__ == "__main__": # テスト用
             print(f"{results[i]["right_hand_mpjpe"]:.2f}")
         else:
             print(results[i]['status'])
-
