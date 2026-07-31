@@ -403,9 +403,9 @@ def Estimate_essential_matrix_raw(
     points_right: Landmark2DArray,
     K_left: np.ndarray,
     K_right: np.ndarray,
-) -> tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
-    未補正の基礎行列から本質行列 `E = K_right.T @ F @ K_left` を求める。
+    正規化画像座標から未補正の本質行列 `E` を直接求める。
 
     Args:
         points_left: 左画像の対応点。shape `(N, 2)`。
@@ -414,8 +414,9 @@ def Estimate_essential_matrix_raw(
         K_right: 右カメラの内部パラメータ。shape `(3, 3)`。
 
     Returns:
-        `(E, F)`。
-        `E` は特異値補正なしの本質行列、`F` は rank補正なしの基礎行列。
+        `(E, points_normalized_left, points_normalized_right)`。
+        `points_*_normalized` は `inv(K) @ [u, v, 1]` で得た正規化画像座標。
+        `E` は `A e = 0` を SVD で解いた、特異値補正なしの本質行列。
     """
     from eight_point_pose import Estimate_essential_matrix_raw as _estimate
 
@@ -453,12 +454,14 @@ def Estimate_relative_pose_eight_point_raw(
         K_right: 右カメラの内部パラメータ。shape `(3, 3)`。
 
     Returns:
-        `R`, `t`, `E`, `F`, `points3d`, `positive_depth_count` などを含む辞書。
-        比較用に `F_rank`, `E_singular_values`, `det_R`,
+        `R`, `t`, `E`, `points_normalized_left`, `points_normalized_right`,
+        `points3d`, `positive_depth_count` などを含む辞書。
+        比較用に `E_rank`, `E_singular_values`, `det_R`,
         `rotation_orthogonality_error` も含む。
 
     Notes:
-        2D点の正規化、`F` の rank 2 補正、`E` の特異値補正は行わない。
+        Hartley 正規化と `E` の特異値補正は行わない。
+        ただし、既知の内部パラメータ `K` による正規化画像座標への変換は行う。
     """
     from eight_point_pose import Estimate_relative_pose_eight_point_raw as _estimate
 

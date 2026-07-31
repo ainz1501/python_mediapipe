@@ -23,13 +23,13 @@ def _Validate_points(points_left: PointArray, points_right: PointArray) -> tuple
     left = np.asarray(points_left, dtype=float)
     right = np.asarray(points_right, dtype=float)
 
-    if left.ndim != 2 or left.shape[1] != 2:
+    if left.ndim != 2 or left.shape[1] != 2: # leftがn×2の形状でない場合、ValueErrorを発生させる
         raise ValueError(f"points_left must have shape (N, 2): {left.shape}")
     if right.ndim != 2 or right.shape[1] != 2:
         raise ValueError(f"points_right must have shape (N, 2): {right.shape}")
-    if left.shape[0] != right.shape[0]:
+    if left.shape[0] != right.shape[0]: # 左右のランドマーク数が等しくない場合、エラーを吐く
         raise ValueError(f"point counts must match: {left.shape[0]} != {right.shape[0]}")
-    if left.shape[0] < 8:
+    if left.shape[0] < 8: # 左画像のランドマークが8点以下（右画像のランドマークと等しい数である前提）
         raise ValueError(f"at least 8 point correspondences are required: {left.shape[0]}")
 
     return left, right
@@ -37,7 +37,7 @@ def _Validate_points(points_left: PointArray, points_right: PointArray) -> tuple
 
 def _Validate_intrinsic_matrix(K: Matrix3x3, name: str) -> np.ndarray:
     """Validate and convert a camera intrinsic matrix."""
-    matrix = np.asarray(K, dtype=float)
+    matrix = np.asarray(K, dtype=float) # nd.arrayにKを変換
     if matrix.shape != (3, 3):
         raise ValueError(f"{name} must have shape (3, 3): {matrix.shape}")
     return matrix
@@ -46,6 +46,62 @@ def _Validate_intrinsic_matrix(K: Matrix3x3, name: str) -> np.ndarray:
 def _As_homogeneous(points: PointArray) -> np.ndarray:
     """Convert shape (N, 2) points to shape (N, 3) homogeneous points."""
     return np.column_stack((points, np.ones(points.shape[0])))
+
+
+def _Normalize_image_points(points: PointArray, K: Matrix3x3, name: str) -> PointArray:
+    """
+    Convert image points to normalized image coordinates using camera intrinsics.
+
+    This applies `inv(K) @ [u, v, 1]` and is different from Hartley point
+    normalization, which moves the centroid and rescales the point cloud.
+    """
+    K = _Validate_intrinsic_matrix(K, name)
+    points = np.asarray(points, dtype=float)
+    if points.ndim != 2 or points.shape[1] != 2:
+        raise ValueError(f"points must have shape (N, 2): {points.shape}")
+
+    homogeneous_points = _As_homogeneous(points)
+    normalized_h = np.linalg.solve(K, homogeneous_points.T).T
+    z = normalized_h[:, 2:3]
+    if np.any(np.abs(z) <= np.finfo(float).eps):
+        raise ValueError(f"{name} produced degenerate normalized image coordinates")
+    normalized_h = normalized_h / z
+    return normalized_h[:, :2]
+
+
+def _Solve_essential_from_normalized_points(
+    points_normalized_left: PointArray,
+    points_normalized_right: PointArray,
+) -> Matrix3x3:
+    """Solve `A e = 0` from normalized image coordinates by SVD."""
+    left, right = _Validate_points(points_normalized_left, points_normalized_right)
+
+    xl = left[:, 0]
+    yl = left[:, 1]
+    xr = right[:, 0]
+    yr = right[:, 1]
+    A = np.column_stack(
+        (
+            xr * xl,
+            xr * yl,
+            xr,
+            yr * xl,
+            yr * yl,
+            yr,
+            xl,
+            yl,
+            np.ones(left.shape[0]),
+        )
+    )
+
+    _, _, Vt = np.linalg.svd(A)
+    if Vt.shape[0] < 9:
+        raise ValueError("failed to solve the essential-matrix eight-point linear system")
+
+    E = Vt[-1].reshape(3, 3)
+    if np.linalg.norm(E) <= np.finfo(float).eps:
+        raise ValueError("estimated essential matrix is degenerate")
+    return E
 
 
 def Normalize_points(points: PointArray) -> tuple[PointArray, Matrix3x3]:
@@ -219,9 +275,9 @@ def Estimate_essential_matrix(
     points_right: PointArray,
     K_left: Matrix3x3,
     K_right: Matrix3x3,
-) -> tuple[Matrix3x3, Matrix3x3]:
+) -> tuple[Matrix3x3, PointArray, PointArray]:
     """
-    Estimate the essential matrix from image correspondences and intrinsics.
+    Estimate the essential matrix directly from image correspondences and intrinsics.
 
     Args:
         points_left: Left image points with shape `(N, 2)`.
@@ -230,17 +286,19 @@ def Estimate_essential_matrix(
         K_right: Right camera intrinsic matrix with shape `(3, 3)`.
 
     Returns:
-        `(E, F)`.
+        `(E, points_normalized_left, points_normalized_right)`.
         `E` is the corrected essential matrix with singular values `(s, s, 0)`.
-        `F` is the corrected rank-2 fundamental matrix.
+        The normalized points are image coordinates converted by `inv(K)`.
     """
+    left, right = _Validate_points(points_left, points_right)
     K_left = _Validate_intrinsic_matrix(K_left, "K_left")
     K_right = _Validate_intrinsic_matrix(K_right, "K_right")
 
-    F = Estimate_fundamental_matrix(points_left, points_right)
-    E = K_right.T @ F @ K_left
+    points_normalized_left = _Normalize_image_points(left, K_left, "K_left")
+    points_normalized_right = _Normalize_image_points(right, K_right, "K_right")
+    E = _Solve_essential_from_normalized_points(points_normalized_left, points_normalized_right)
     E = _Enforce_essential_constraints(E)
-    return E, F
+    return E, points_normalized_left, points_normalized_right
 
 
 def Estimate_essential_matrix_raw(
@@ -248,9 +306,9 @@ def Estimate_essential_matrix_raw(
     points_right: PointArray,
     K_left: Matrix3x3,
     K_right: Matrix3x3,
-) -> tuple[Matrix3x3, Matrix3x3]:
+) -> tuple[Matrix3x3, PointArray, PointArray]:
     """
-    Estimate the essential matrix without normalization or singular-value correction.
+    Estimate the essential matrix directly without Hartley normalization or correction.
 
     Args:
         points_left: Left image points with shape `(N, 2)`.
@@ -259,17 +317,19 @@ def Estimate_essential_matrix_raw(
         K_right: Right camera intrinsic matrix with shape `(3, 3)`.
 
     Returns:
-        `(E, F)`.
-        `F` is estimated by `Estimate_fundamental_matrix_raw`.
-        `E` is computed as `K_right.T @ F @ K_left` without enforcing
-        singular values `(s, s, 0)`.
+        `(E, points_normalized_left, points_normalized_right)`.
+        The normalized points are computed as `inv(K) @ [u, v, 1]`.
+        `E` is the direct reshape of `Vt[-1]` from solving `A e = 0`,
+        without enforcing singular values `(s, s, 0)`.
     """
+    left, right = _Validate_points(points_left, points_right)
     K_left = _Validate_intrinsic_matrix(K_left, "K_left")
     K_right = _Validate_intrinsic_matrix(K_right, "K_right")
 
-    F = Estimate_fundamental_matrix_raw(points_left, points_right)
-    E = K_right.T @ F @ K_left
-    return E, F
+    points_normalized_left = _Normalize_image_points(left, K_left, "K_left")
+    points_normalized_right = _Normalize_image_points(right, K_right, "K_right")
+    E = _Solve_essential_from_normalized_points(points_normalized_left, points_normalized_right)
+    return E, points_normalized_left, points_normalized_right
 
 
 def Decompose_essential_matrix(E: Matrix3x3) -> list[PoseCandidate]:
@@ -452,7 +512,8 @@ def Estimate_relative_pose_eight_point(
         `R`: Selected relative rotation from left camera to right camera.
         `t`: Selected relative translation direction from left to right.
         `E`: Corrected essential matrix.
-        `F`: Corrected fundamental matrix.
+        `points_normalized_left`: Left points converted by `inv(K_left)`.
+        `points_normalized_right`: Right points converted by `inv(K_right)`.
         `points3d`: Triangulated points for the selected pose.
         `positive_depth_count`: Number of points in front of both cameras.
         `pose_candidates`: The four decomposed pose candidates.
@@ -464,7 +525,7 @@ def Estimate_relative_pose_eight_point(
     K_left = _Validate_intrinsic_matrix(K_left, "K_left")
     K_right = _Validate_intrinsic_matrix(K_right, "K_right")
 
-    E, F = Estimate_essential_matrix(left, right, K_left, K_right)
+    E, points_normalized_left, points_normalized_right = Estimate_essential_matrix(left, right, K_left, K_right)
     pose_candidates = Decompose_essential_matrix(E)
     R, t, points3d, positive_depth_count = Choose_correct_pose(
         pose_candidates,
@@ -478,7 +539,8 @@ def Estimate_relative_pose_eight_point(
         "R": R,
         "t": t,
         "E": E,
-        "F": F,
+        "points_normalized_left": points_normalized_left,
+        "points_normalized_right": points_normalized_right,
         "points3d": points3d,
         "positive_depth_count": positive_depth_count,
         "pose_candidates": pose_candidates,
@@ -505,11 +567,12 @@ def Estimate_relative_pose_eight_point_raw(
         `R`: Selected relative rotation from left camera to right camera.
         `t`: Selected relative translation direction from left to right.
         `E`: Raw essential matrix, without singular-value correction.
-        `F`: Raw fundamental matrix, without normalization or rank correction.
+        `points_normalized_left`: Left points converted by `inv(K_left)`.
+        `points_normalized_right`: Right points converted by `inv(K_right)`.
         `points3d`: Triangulated points for the selected pose.
         `positive_depth_count`: Number of points in front of both cameras.
         `pose_candidates`: The four decomposed pose candidates.
-        `F_rank`: Numeric rank of raw `F`.
+        `E_rank`: Numeric rank of raw `E`.
         `E_singular_values`: Singular values of raw `E`.
         `det_R`: Determinant of the selected rotation matrix.
         `rotation_orthogonality_error`: Frobenius norm of `R.T @ R - I`.
@@ -518,7 +581,7 @@ def Estimate_relative_pose_eight_point_raw(
     K_left = _Validate_intrinsic_matrix(K_left, "K_left")
     K_right = _Validate_intrinsic_matrix(K_right, "K_right")
 
-    E, F = Estimate_essential_matrix_raw(left, right, K_left, K_right)
+    E, points_normalized_left, points_normalized_right = Estimate_essential_matrix_raw(left, right, K_left, K_right)
     pose_candidates = Decompose_essential_matrix_raw(E)
     R, t, points3d, positive_depth_count = Choose_correct_pose(
         pose_candidates,
@@ -533,11 +596,12 @@ def Estimate_relative_pose_eight_point_raw(
         "R": R,
         "t": t,
         "E": E,
-        "F": F,
+        "points_normalized_left": points_normalized_left,
+        "points_normalized_right": points_normalized_right,
         "points3d": points3d,
         "positive_depth_count": positive_depth_count,
         "pose_candidates": pose_candidates,
-        "F_rank": int(np.linalg.matrix_rank(F)),
+        "E_rank": int(np.linalg.matrix_rank(E)),
         "E_singular_values": E_singular_values,
         "det_R": float(np.linalg.det(R)),
         "rotation_orthogonality_error": float(np.linalg.norm(R.T @ R - np.eye(3))),
