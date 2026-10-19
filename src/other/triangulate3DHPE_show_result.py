@@ -7,7 +7,11 @@ import sys
 import json
 import glob
 import os
-import triangulate3DHPE as hpe
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from modules import triangulate3DHPE as hpe
 
 """
 結果比較用プログラム
@@ -49,11 +53,11 @@ K_right = np.array(param2["K"])
 R_right, T_right = np.array(param2["R"]), np.array(param2["t"])
 
 # パスまとめ
-TEMPORARY_IMAGES_STORAGE_PATH = "./output_images/images_temporary_storage/" # 一時的に画像を保存するフォルダのパス
-INPUT1_IMAGE_PATH = "./sys_inputs/input_images/"+DATASET_NAME+"_cam"+str(VIDEO1_NUM).zfill(2)+"/"
-INPUT2_IMAGE_PATH = "./sys_inputs/input_images/"+DATASET_NAME+"_cam"+str(VIDEO2_NUM).zfill(2)+"/"
-VIDEO_STORAGE_PATH = "./sys_outputs/output_videos/"+DATASET_NAME+"_hdvideo"+str(VIDEO1_NUM).zfill(2)+str(VIDEO2_NUM).zfill(2)+"/"
-OUTPUT_LANDMARKS_PATH = "./sys_outputs/output_landmarks/"+DATASET_NAME+"_cam"+str(VIDEO1_NUM).zfill(2)+str(VIDEO2_NUM).zfill(2)+"/"
+TEMPORARY_IMAGES_STORAGE_PATH = "./data/output_images/images_temporary_storage/" # 一時的に画像を保存するフォルダのパス
+INPUT1_IMAGE_PATH = "./data/sys_inputs/input_images/"+DATASET_NAME+"_cam"+str(VIDEO1_NUM).zfill(2)+"/"
+INPUT2_IMAGE_PATH = "./data/sys_inputs/input_images/"+DATASET_NAME+"_cam"+str(VIDEO2_NUM).zfill(2)+"/"
+VIDEO_STORAGE_PATH = "./data/sys_outputs/output_videos/"+DATASET_NAME+"_hdvideo"+str(VIDEO1_NUM).zfill(2)+str(VIDEO2_NUM).zfill(2)+"/"
+OUTPUT_LANDMARKS_PATH = "./data/sys_outputs/output_landmarks/"+DATASET_NAME+"_cam"+str(VIDEO1_NUM).zfill(2)+str(VIDEO2_NUM).zfill(2)+"/"
 
 # ボーン情報
 POSE_CONNECTIONS = mp_pose.POSE_CONNECTIONS

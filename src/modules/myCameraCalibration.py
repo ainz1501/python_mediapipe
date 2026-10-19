@@ -1,7 +1,11 @@
 import numpy as np
 
-import depthFromDefocus as dfd
-import eightPointAlgorithm as epa
+try:
+    from . import depthFromDefocus as dfd
+    from . import eightPointAlgorithm as epa
+except ImportError:
+    import depthFromDefocus as dfd
+    import eightPointAlgorithm as epa
 
 
 def recoverRealScaleTranslation(

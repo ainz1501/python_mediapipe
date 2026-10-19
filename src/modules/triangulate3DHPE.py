@@ -39,7 +39,7 @@ PanopticPathDict = dict[str, str]
 入力画像2枚、3Dプロットを表示
 """
     # if test_mode:
-    #     test_root = "./testIO"
+    #     test_root = "./data/testIO"
     #     inputs_root = os.path.join(test_root, "test_sys_inputs")
     #     videos_root = os.path.join(test_root, "test_sys_outputs", "output_videos")
     #     landmarks_root = os.path.join(test_root, "test_sys_outputs", "output_landmarks")
@@ -65,15 +65,15 @@ DEFAULT_VIDEO2_NUM: int = 23
 #: デフォルトの処理終了フレーム番号。この値は処理対象に含まない。
 DEFAULT_END_FRAME_NUM: int = 9056
 #: 注釈画像などの一時ファイルを保存するデフォルトディレクトリ。
-DEFAULT_TEMPORARY_IMAGES_STORAGE_PATH: str = "./output_images/images_temporary_storage/"
+DEFAULT_TEMPORARY_IMAGES_STORAGE_PATH: str = "./data/output_images/images_temporary_storage/"
 #: Panoptic Dataset が置かれているデフォルトのルートディレクトリ。
 DEFAULT_PANOPTIC_ROOT: str = "./panoptic-toolbox"
 #: 抽出した入力画像を保存するデフォルトのルートディレクトリ。
-DEFAULT_INPUTS_ROOT: str = "./sys_inputs/input_images"
+DEFAULT_INPUTS_ROOT: str = "./data/sys_inputs/input_images"
 #: 比較用動画を保存するデフォルトのルートディレクトリ。
-DEFAULT_VIDEOS_ROOT: str = "./sys_outputs/output_videos"
+DEFAULT_VIDEOS_ROOT: str = "./data/sys_outputs/output_videos"
 #: 推定ランドマーク JSON を保存するデフォルトのルートディレクトリ。
-DEFAULT_LANDMARKS_ROOT: str = "./sys_outputs/output_landmarks"
+DEFAULT_LANDMARKS_ROOT: str = "./data/sys_outputs/output_landmarks"
 TEMPORARY_IMAGES_STORAGE_PATH: str = DEFAULT_TEMPORARY_IMAGES_STORAGE_PATH
 
 # 別データ間で同じ箇所を示す対応ランドマーク番号リスト[正解データ, 推定データ]
@@ -171,11 +171,11 @@ VIDEO2_NUM: int = 23
 END_FRAME_NUM: int = 9056
 
 # パスまとめ
-TEMPORARY_IMAGES_STORAGE_PATH: str = "./output_images/images_temporary_storage/" # 一時的に画像を保存するフォルダのパス
-INPUT1_IMAGE_PATH: str = "./inputs/input_images/"+DATASET_NAME+"_cam"+str(VIDEO1_NUM).zfill(2)+"/"
-INPUT2_IMAGE_PATH: str = "./inputs/input_images/"+DATASET_NAME+"_cam"+str(VIDEO2_NUM).zfill(2)+"/"
-VIDEO_STORAGE_PATH: str = ".outputs/output_videos/"+DATASET_NAME+"_hdvideo"+str(VIDEO1_NUM).zfill(2)+str(VIDEO2_NUM).zfill(2)+"/"
-OUTPUT_LANDMARKS_PATH: str = "sys_outputs/output_landmarks/"+DATASET_NAME+"_cam"+str(VIDEO1_NUM).zfill(2)+str(VIDEO2_NUM).zfill(2)+"/"
+TEMPORARY_IMAGES_STORAGE_PATH: str = "./data/output_images/images_temporary_storage/" # 一時的に画像を保存するフォルダのパス
+INPUT1_IMAGE_PATH: str = "./data/inputs/input_images/"+DATASET_NAME+"_cam"+str(VIDEO1_NUM).zfill(2)+"/"
+INPUT2_IMAGE_PATH: str = "./data/inputs/input_images/"+DATASET_NAME+"_cam"+str(VIDEO2_NUM).zfill(2)+"/"
+VIDEO_STORAGE_PATH: str = "./data/outputs/output_videos/"+DATASET_NAME+"_hdvideo"+str(VIDEO1_NUM).zfill(2)+str(VIDEO2_NUM).zfill(2)+"/"
+OUTPUT_LANDMARKS_PATH: str = "./data/sys_outputs/output_landmarks/"+DATASET_NAME+"_cam"+str(VIDEO1_NUM).zfill(2)+str(VIDEO2_NUM).zfill(2)+"/"
 
 _CAMERA_PARAM_CACHE = {}
 _LAZY_CAMERA_ATTRS = {
@@ -393,7 +393,10 @@ def Estimate_fundamental_matrix_raw(
         実装本体は `eight_point_pose.Estimate_fundamental_matrix_raw`。
         2D点の正規化と `rank(F) = 2` 補正は行わない。
     """
-    from eight_point_pose import Estimate_fundamental_matrix_raw as _estimate
+    try:
+        from .eight_point_pose import Estimate_fundamental_matrix_raw as _estimate
+    except ImportError:
+        from eight_point_pose import Estimate_fundamental_matrix_raw as _estimate
 
     return _estimate(points_left, points_right)
 
@@ -418,7 +421,10 @@ def Estimate_essential_matrix_raw(
         `points_*_normalized` は `inv(K) @ [u, v, 1]` で得た正規化画像座標。
         `E` は `A e = 0` を SVD で解いた、特異値補正なしの本質行列。
     """
-    from eight_point_pose import Estimate_essential_matrix_raw as _estimate
+    try:
+        from .eight_point_pose import Estimate_essential_matrix_raw as _estimate
+    except ImportError:
+        from eight_point_pose import Estimate_essential_matrix_raw as _estimate
 
     return _estimate(points_left, points_right, K_left, K_right)
 
@@ -433,7 +439,10 @@ def Decompose_essential_matrix_raw(E: np.ndarray) -> list[tuple[np.ndarray, np.n
     Returns:
         `(R, t)` 候補のリスト。`R` は shape `(3, 3)`、`t` は shape `(3,)`。
     """
-    from eight_point_pose import Decompose_essential_matrix_raw as _decompose
+    try:
+        from .eight_point_pose import Decompose_essential_matrix_raw as _decompose
+    except ImportError:
+        from eight_point_pose import Decompose_essential_matrix_raw as _decompose
 
     return _decompose(E)
 
@@ -463,7 +472,10 @@ def Estimate_relative_pose_eight_point_raw(
         Hartley 正規化と `E` の特異値補正は行わない。
         ただし、既知の内部パラメータ `K` による正規化画像座標への変換は行う。
     """
-    from eight_point_pose import Estimate_relative_pose_eight_point_raw as _estimate
+    try:
+        from .eight_point_pose import Estimate_relative_pose_eight_point_raw as _estimate
+    except ImportError:
+        from eight_point_pose import Estimate_relative_pose_eight_point_raw as _estimate
 
     return _estimate(points_left, points_right, K_left, K_right)
 
@@ -1206,7 +1218,7 @@ def run_triangulate3dhpe_data(
         videos_root: 比較用動画を保存するルートディレクトリ。
         landmarks_root: 推定ランドマーク JSON を保存するルートディレクトリ。
         temp_storage_path: 中間画像を保存するディレクトリ。
-        test_mode: `True` の場合、`./testIO` 配下のテスト用ディレクトリ構造を使う。
+        test_mode: `True` の場合、`./data/testIO` 配下のテスト用ディレクトリ構造を使う。
         verbose: `True` の場合、処理中のフレーム番号などを標準出力に表示する。
 
     Returns:
@@ -1221,7 +1233,7 @@ def run_triangulate3dhpe_data(
         FileNotFoundError: 動画またはキャリブレーション JSON を開けない場合。
     """
     if test_mode:
-        test_root = "./testIO"
+        test_root = "./data/testIO"
         inputs_root = os.path.join(test_root, "test_sys_inputs")
         videos_root = os.path.join(test_root, "test_sys_outputs", "output_videos")
         landmarks_root = os.path.join(test_root, "test_sys_outputs", "output_landmarks")

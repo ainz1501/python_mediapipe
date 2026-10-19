@@ -17,8 +17,8 @@ HEIGHT, WIDTH       : 画像の高さ、幅（左右同じカメラ、デバイ�
 K                   : カメラパラメータ（左右同じカメラ、デバイスを使用しているため１つのみ）. 単位は[px]
 """
 # 画像読み込み サイズは横5712 × 縦4284
-IMG_PATH = '/Users/tokudataichi/Documents/python_mediapipe/input_images/60left.jpg'
-IMG2_PATH = '/Users/tokudataichi/Documents/python_mediapipe/input_images/right50_image.JPG'
+IMG_PATH = './data/test_inputs/60left.JPG'
+IMG2_PATH = './data/test_inputs/right50_image.JPG'
 image = cv2.imread(IMG_PATH)
 image2 = cv2.imread(IMG2_PATH)
 

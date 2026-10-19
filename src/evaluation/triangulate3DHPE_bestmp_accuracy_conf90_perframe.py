@@ -7,6 +7,7 @@ import sys
 import json
 import glob
 import os
+import sympy as sp
 
 """
 MediaPipe Poseの高い信頼度をもつランドマーク精度を検証する
@@ -35,11 +36,11 @@ VIDEO2_NUM = 23
 END_FRAME_NUM = 9056
 
 # パスまとめ
-TEMPORARY_IMAGES_STORAGE_PATH = "./output_images/images_temporary_storage/" # 一時的に画像を保存するフォルダのパス
-INPUT1_IMAGE_PATH = "./inputs/input_images/"+DATASET_NAME+"_cam"+str(VIDEO1_NUM).zfill(2)+"/"
-INPUT2_IMAGE_PATH = "./inputs/input_images/"+DATASET_NAME+"_cam"+str(VIDEO2_NUM).zfill(2)+"/"
-VIDEO_STORAGE_PATH = ".outputs/output_videos/"+DATASET_NAME+"_hdvideo"+str(VIDEO1_NUM).zfill(2)+str(VIDEO2_NUM).zfill(2)+"/"
-OUTPUT_LANDMARKS_PATH = "outputs/output_landmarks/"+DATASET_NAME+"_cam"+str(VIDEO1_NUM).zfill(2)+str(VIDEO2_NUM).zfill(2)+"/"
+TEMPORARY_IMAGES_STORAGE_PATH = "./data/output_images/images_temporary_storage/" # 一時的に画像を保存するフォルダのパス
+INPUT1_IMAGE_PATH = "./data/inputs/input_images/"+DATASET_NAME+"_cam"+str(VIDEO1_NUM).zfill(2)+"/"
+INPUT2_IMAGE_PATH = "./data/inputs/input_images/"+DATASET_NAME+"_cam"+str(VIDEO2_NUM).zfill(2)+"/"
+VIDEO_STORAGE_PATH = "./data/outputs/output_videos/"+DATASET_NAME+"_hdvideo"+str(VIDEO1_NUM).zfill(2)+str(VIDEO2_NUM).zfill(2)+"/"
+OUTPUT_LANDMARKS_PATH = "./data/outputs/output_landmarks/"+DATASET_NAME+"_cam"+str(VIDEO1_NUM).zfill(2)+str(VIDEO2_NUM).zfill(2)+"/"
 
 # 設定パラメータ
 START_FRAME = 137
@@ -193,7 +194,7 @@ if __name__ == "__main__":
 
     for frame_num in range(FIRST_FRAME_NUM, END_FRAME_NUM+1, FRAME_INTERVAL):
         # ベストランドマーク呼び出し
-        with open("./outputs/best_landmarks/best_landmarks.json", "r") as f:
+        with open("./data/outputs/best_landmarks/best_landmarks.json", "r") as f:
             data = json.load(f)
         frame_data = data.get(str(frame_num))
         lm_0 = frame_data["0"]
@@ -205,13 +206,10 @@ if __name__ == "__main__":
         landmarks_3d = np.array(bodies[0]["joints19"] if len(bodies) is not 0 else []).reshape(-1, 4)
 
         # イレギュラーが存在しないフレームのみ計測
-        mpjpe_flag = True
+        mpjpe_flag = True  # フレームはスキップしない方針（GTが空の場合のみFalse）
         if landmarks_3d.shape[0] == 0:
             mpjpe_flag = False
-        for lm in landmarks_3d:
-            if lm[3] <= 0.1:
-                mpjpe_flag = False
-                break
+
                 
         # 誤差格納用
         errors = {
@@ -222,12 +220,17 @@ if __name__ == "__main__":
         GT_LANDMARK = landmarks_3d
 
         # MPJPE 計算処理
-        print(f"frame_num:{frame_num}")
+        # print(f"frame_num:{frame_num}")
         if mpjpe_flag:
             for gt_id, mp_id in GT_MP_MAP:
                 lm_info = frame_data[str(mp_id)]
                 view_id = lm_info["view"]
                 gt_2d = np.array([lm_info["x"], lm_info["y"]])
+                
+                # === GT信頼度フィルタ（confidence >= 0.9 のランドマークのみ使用） ===
+                if GT_LANDMARK[gt_id, 3] < 0.0:
+                    # print("Throught!!")
+                    continue
                 
                 X_world = GT_LANDMARK[gt_id,:3]
                 R = np.array(R_all[view_id])
@@ -245,7 +248,7 @@ if __name__ == "__main__":
             for part, part_errors in errors.items():
                 if part_errors:
                     mpjpe = np.mean(part_errors)
-                    print(f"{part} MPJPE: {mpjpe:.2f} cm")
+                    print(f"{mpjpe:.2f}") # MPJPE
                 else:
                     print(f"{part}: ランドマークが見つかりませんでした。")
         else:

@@ -7,9 +7,9 @@ import glob
 def concatenation_images():
     idx = 1
     while True:
-        left_annotation_image = cv2.imread("./output_images/images_temporary_storage/annotated_L.png")
-        right_annotation_image = cv2.imread("./output_images/images_temporary_storage/annotated_R.png")
-        plot3d_image = cv2.imread("/Users/tokudataichi/Documents/python_mediapipe/output_3dplot/3dplot_"+str(idx)+".png")
+        left_annotation_image = cv2.imread("./data/output_images/images_temporary_storage/annotated_L.png")
+        right_annotation_image = cv2.imread("./data/output_images/images_temporary_storage/annotated_R.png")
+        plot3d_image = cv2.imread("./data/outputs/output_3dplot/3dplot_"+str(idx)+".png")
         HEIGHT, WIDTH, _ = left_annotation_image.shape # HEIGHT=1080, WIDTH=1920
         plot3d_image_resize = cv2.resize(plot3d_image, (HEIGHT, HEIGHT), interpolation=cv2.INTER_CUBIC)
         concatenation_image = cv2.hconcat([left_annotation_image, right_annotation_image])
@@ -19,7 +19,7 @@ def concatenation_images():
 
 def create_video_from_images():
     images = []
-    for name in sorted(glob.glob('/Users/tokudataichi/Documents/python_mediapipe/output_images/hdvideo_frames_00&01/*.jpg')):
+    for name in sorted(glob.glob('./data/output_images/hdvideo_frames_00&01/*.jpg')):
         img = cv2.imread(name)
         if img is None:
             break

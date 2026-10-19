@@ -16,7 +16,7 @@ VIDEO1_NUM = 18
 VIDEO2_NUM = 23
 
 GT_HAND_DATA_FOLDER_PATH = Path("./panoptic-toolbox") / DATASET_NAME / "hdHand3d"
-OUTPUT_LANDMARKS_PATH = Path("./outputs/output_landmarks") / f"{DATASET_NAME}_cam{VIDEO1_NUM:02d}{VIDEO2_NUM:02d}"
+OUTPUT_LANDMARKS_PATH = Path("./data/outputs/output_landmarks") / f"{DATASET_NAME}_cam{VIDEO1_NUM:02d}{VIDEO2_NUM:02d}"
 
 # CMU Panopticの手ランドマーク接続情報 (1始まり) を0始まりへ変換
 GT_HAND_CONNECTIONS = np.array([

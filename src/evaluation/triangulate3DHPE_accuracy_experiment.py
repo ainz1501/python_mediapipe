@@ -15,12 +15,12 @@ CMU Panopticデータセットのサイト http://domedb.perception.cs.cmu.edu/
 # 使用データセット
 DATASET_NAME = "171204_pose3"
 # 画像を一時的に保存するフォルダパス
-TEMPORARY_IMAGES_STORAGE_PATH = "./output_images/images_temporary_storage/"
+TEMPORARY_IMAGES_STORAGE_PATH = "./data/output_images/images_temporary_storage/"
 # 正解データセットのボーン情報
 body_edges = np.array([[1,2],[1,4],[4,5],[5,6],[1,3],[3,7],[7,8],[8,9],[3,13],[13,14],[14,15],[1,10],[10,11],[11,12]])-1
 # 正解データ呼び出し用パス
 GROUND_TRUTH_FOLDER_PATH = "./panoptic-toolbox/"+DATASET_NAME+"/hdPose3d_stage1_coco19/"
-GROUND_TRUTH_SAVE_FOLDER_PATH = "./gt_data_"+DATASET_NAME+"/"
+GROUND_TRUTH_SAVE_FOLDER_PATH = "./data/gt_data_"+DATASET_NAME+"/"
 if not os.path.isdir(GROUND_TRUTH_SAVE_FOLDER_PATH): # 指定したフォルダがなければ作成
     os.makedirs(GROUND_TRUTH_SAVE_FOLDER_PATH)
 
@@ -405,7 +405,7 @@ VIDEO1_NUM = 18
 VIDEO2_NUM = 23
 # 3dプロット保存パス
 USING_VIDEO = str(VIDEO1_NUM).zfill(2)+"&"+str(VIDEO2_NUM).zfill(2)
-SAVE_FOLDER_PATH = "./output_images/"+DATASET_NAME+"_"+USING_VIDEO+"/"
+SAVE_FOLDER_PATH = "./data/output_images/"+DATASET_NAME+"_"+USING_VIDEO+"/"
 if not os.path.isdir(SAVE_FOLDER_PATH): # 指定したフォルダがなければ作成
     os.makedirs(SAVE_FOLDER_PATH)
 

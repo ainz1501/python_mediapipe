@@ -24,7 +24,7 @@ FIRST_FRAME_NUM = 137 # データセットに含まれるランドマークデ�
 使用できないフレームについて
 下記のフレームは例外となるデータであるため、次のフレームをセットして再度プログラムを実行する．
 初期値 137
-8337: データが右手のみ（左手のデータが存在しない）
+8337: 手のデータが右手しかなく、ほとんどのランドマークがエラーを示している
 """
 
 # 使用データ指定
@@ -48,11 +48,11 @@ K_right = np.array(param2["K"])
 R_right, T_right = np.array(param2["R"]), np.array(param2["t"])
 
 # パスまとめ
-TEMPORARY_IMAGES_STORAGE_PATH = "./output_images/images_temporary_storage/" # 一時的に画像を保存するフォルダのパス
-INPUT1_IMAGE_PATH = "./inputs/input_images/"+DATASET_NAME+"_cam"+str(VIDEO1_NUM).zfill(2)+"/"
-INPUT2_IMAGE_PATH = "./inputs/input_images/"+DATASET_NAME+"_cam"+str(VIDEO2_NUM).zfill(2)+"/"
-VIDEO_STORAGE_PATH = ".outputs/output_videos/"+DATASET_NAME+"_hdvideo"+str(VIDEO1_NUM).zfill(2)+str(VIDEO2_NUM).zfill(2)+"/"
-OUTPUT_LANDMARKS_PATH = "outputs/output_landmarks/"+DATASET_NAME+"_cam"+str(VIDEO1_NUM).zfill(2)+str(VIDEO2_NUM).zfill(2)+"/"
+TEMPORARY_IMAGES_STORAGE_PATH = "./data/output_images/images_temporary_storage/" # 一時的に画像を保存するフォルダのパス
+INPUT1_IMAGE_PATH = "./data/inputs/input_images/"+DATASET_NAME+"_cam"+str(VIDEO1_NUM).zfill(2)+"/"
+INPUT2_IMAGE_PATH = "./data/inputs/input_images/"+DATASET_NAME+"_cam"+str(VIDEO2_NUM).zfill(2)+"/"
+VIDEO_STORAGE_PATH = "./data/outputs/output_videos/"+DATASET_NAME+"_hdvideo"+str(VIDEO1_NUM).zfill(2)+str(VIDEO2_NUM).zfill(2)+"/"
+OUTPUT_LANDMARKS_PATH = "./data/outputs/output_landmarks/"+DATASET_NAME+"_cam"+str(VIDEO1_NUM).zfill(2)+str(VIDEO2_NUM).zfill(2)+"/"
 
 # 別データ間で同じ箇所を示す対応ランドマーク番号リスト[正解データ, 推定データ]
 GT_PR_MAP = [[1, 0],    # Nose
@@ -74,15 +74,15 @@ GT_PR_MAP = [[1, 0],    # Nose
     [18, 8],   # Right Ear
     ]
 
-RIGHT_HAND_MAP = [[0, 16],  # Wrist
+RIGHT_HAND_MAP = [[15, 1],  # Wrist
             [17, 18],   # pinky
-            [5, 20],    # index
-            [2, 22]]    # thumb
+            [19, 6],    # index
+            [21, 3]]    # thumb
 
-LEFT_HAND_MAP = [[0,15],    # Wrist
-                 [17, 17],  # pinky
-                 [5, 19],   # index
-                 [2, 21]]   # thumb
+LEFT_HAND_MAP = [[16,1],    # Wrist
+                 [18, 18],  # pinky
+                 [20, 6],   # index
+                 [22, 3]]   # thumb
 
 """
 GT (CMU Panoptic Dataset)
@@ -146,13 +146,11 @@ def compute_mpjpe(predicted, ground_truth):
 def make_compe_landmarks(ground_truth, predicted, compe_map, confidence:float = -1.0):
     """
     同じ箇所を推定したランドマークを抽出し、各ランドマークを出力する操作
-    GTランドマークの信頼度が閾値を下回っているならそのペアを除く
 
     Parameters:
         predicted (np.ndarray): 予測された3D関節位置 (N, 3)
         ground_truth (np.ndarray): GTの3D関節位置 (N, 3)
         compe_map (np.ndarray): 対応ランドマークのペアマップ (M, 2)
-        confidence (float): 信頼度の閾値
 
     Returns:
         compe_predicted (np.ndarray): 抽出した予測3D関節位置 (N, 3)
@@ -164,11 +162,10 @@ def make_compe_landmarks(ground_truth, predicted, compe_map, confidence:float = 
 
 
     for [gt_num, pd_num] in compe_map:
-        # === GT信頼度フィルタ ===
-        if ground_truth [gt_num, 3] <= confidence:
+        # === GT信頼度フィルタ（confidence >= 0.9 のランドマークのみ使用） ===
+        if ground_truth [gt_num, 3] < confidence:
             # print("Throught!!")
             continue
-
         compe_predicted.append(predicted[pd_num])
         compe_ground_truth.append(ground_truth[gt_num])
 
@@ -192,34 +189,7 @@ while frame_num < END_FRAME_NUM:
         mpjpe_flag = False
     else:
         gt_body = np.array(gt_frame['bodies'][0]['joints19']).reshape(-1, 4)
-
-    # 両手それぞれの正解データ呼び出し
-    with open(GT_HAND_DATA_FOLDER_PATH+"handRecon3D_hd"+str(frame_num).zfill(8)+".json") as gt: # 両手
-        ground_truth_file = gt
-        gt_frame = json.load(ground_truth_file)
-        # print(not(gt_frame is None))
-    # (x,y,z)の21行3列の配列を作成 'landmarks'の長さが63であり、手のランドマークは21個であることから想定
-    if len(gt_frame['people']) == 0:
-        gt_left = np.zeros((21, 4))
-        gt_right = np.zeros((21, 4))
-        mpjpe_flag = False
-    else:
-        # 左手データ収納
-        if not(len(gt_frame['people'][0]['left_hand']) == 0):
-            gt_left_lm = np.array(gt_frame['people'][0]['left_hand']['landmarks']).reshape(-1, 3)
-            gt_left_conf = np.array(gt_frame['people'][0]['left_hand']['averageScore']).reshape(-1,1)
-            gt_left = np.concatenate((gt_left_lm, gt_left_conf), axis=1)
-        else:
-            mpjpe_flag = False
-            gt_left = np.zeros((21,4))
-        # 右手データ収納
-        if not(len(gt_frame['people'][0]['right_hand']) == 0):
-            gt_right_lm = np.array(gt_frame['people'][0]['right_hand']['landmarks']).reshape(-1, 3)
-            gt_right_conf = np.array(gt_frame['people'][0]['right_hand']['averageScore']).reshape(-1,1)
-            gt_right = np.concatenate((gt_right_lm, gt_right_conf), axis=1)
-        else:
-            mpjpe_flag = False
-            gt_right = np.zeros((21,4))
+       
 
     # 推定データ呼び出し
     with open(OUTPUT_LANDMARKS_PATH+"frame_"+str(frame_num).zfill(8)+".json") as out:
@@ -235,36 +205,14 @@ while frame_num < END_FRAME_NUM:
             lm_list.append(lm[str(i)])
         out_body = np.array(lm_list)
 
-
+    
     # MPJPEの計算
     compe_gt, compe_pd = make_compe_landmarks(gt_body, out_body, GT_PR_MAP, confidence=0.0)
-    left_compe_gt, left_compe_pd = make_compe_landmarks(gt_left, out_body, LEFT_HAND_MAP, confidence=0.0)
-    right_compe_gt, right_compe_pd = make_compe_landmarks(gt_right, out_body, RIGHT_HAND_MAP, confidence=0.0)
-
     if mpjpe_flag:
         if compe_gt.size > 0 and compe_pd.size > 0:
             mpjpe = compute_mpjpe(compe_pd, compe_gt[:,:3]) # 4列目（信頼度）は除く
             # print(f"frame:{frame_num}, {mpjpe:.2f}")
             print(f"{mpjpe:.2f}")
-
-        if left_compe_gt.size > 0 and left_compe_pd.size > 0:
-            left_mpjpe = compute_mpjpe(left_compe_pd, left_compe_gt[:, :3])
-            # print(f"frame:{frame_num}, {left_mpjpe:.2f}")
-            # print(f"{left_mpjpe:.2f}")
-
-        if right_compe_gt.size > 0 and right_compe_pd.size > 0:
-            right_mpjpe = compute_mpjpe(right_compe_pd, right_compe_gt[:, :3])
-            # print(f"frame:{frame_num}, {right_mpjpe:.2f}")
-            # print(f"{right_mpjpe:.2f}")
-        
-        holistic_gt = np.concatenate((compe_gt, left_compe_gt, right_compe_gt), axis=0)
-        holistic_pd = np.concatenate((compe_pd, left_compe_pd, right_compe_pd), axis=0)
-        if holistic_gt.size > 0 and holistic_pd.size > 0:
-            holistic_mpjpe = compute_mpjpe(holistic_pd, holistic_gt[:, :3])
-            # print(f"frame:{frame_num}, {holistic_mpjpe:.2f}")
-            # print(f"{holistic_mpjpe:.2f}")
-
-
         else:
             print("対象のランドマークがありませんでした")
     else:
@@ -272,13 +220,3 @@ while frame_num < END_FRAME_NUM:
     frame_num += CAPTURE_RATE
 
 cv2.destroyAllWindows()
-
-# if __name__ == "__main__":
-#     results = run_mpjpe_evaluation()
-#     print("finished!!")
-#     for i in range(0, len(results)):
-#         if results[i]["status"] == 'ok':   
-#             print(f"{results[i]["holistic_mpjpe"]:.2f}")
-#         else:
-#             print(results[i]['status'])
-

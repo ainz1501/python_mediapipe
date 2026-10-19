@@ -40,11 +40,11 @@ K_right = np.array(param2["K"])
 R_right, T_right = np.array(param2["R"]), np.array(param2["t"])
 
 # パスまとめ
-TEMPORARY_IMAGES_STORAGE_PATH = "./output_images/images_temporary_storage/" # 一時的に画像を保存するフォルダのパス
-INPUT1_IMAGE_PATH = "./inputs/input_images/"+DATASET_NAME+"_cam"+str(VIDEO1_NUM).zfill(2)+"/"
-INPUT2_IMAGE_PATH = "./inputs/input_images/"+DATASET_NAME+"_cam"+str(VIDEO2_NUM).zfill(2)+"/"
-VIDEO_STORAGE_PATH = ".outputs/output_videos/"+DATASET_NAME+"_hdvideo"+str(VIDEO1_NUM).zfill(2)+str(VIDEO2_NUM).zfill(2)+"/"
-OUTPUT_LANDMARKS_PATH = "outputs/output_landmarks/"+DATASET_NAME+"_cam"+str(VIDEO1_NUM).zfill(2)+str(VIDEO2_NUM).zfill(2)+"/"
+TEMPORARY_IMAGES_STORAGE_PATH = "./data/output_images/images_temporary_storage/" # 一時的に画像を保存するフォルダのパス
+INPUT1_IMAGE_PATH = "./data/inputs/input_images/"+DATASET_NAME+"_cam"+str(VIDEO1_NUM).zfill(2)+"/"
+INPUT2_IMAGE_PATH = "./data/inputs/input_images/"+DATASET_NAME+"_cam"+str(VIDEO2_NUM).zfill(2)+"/"
+VIDEO_STORAGE_PATH = "./data/outputs/output_videos/"+DATASET_NAME+"_hdvideo"+str(VIDEO1_NUM).zfill(2)+str(VIDEO2_NUM).zfill(2)+"/"
+OUTPUT_LANDMARKS_PATH = "./data/outputs/output_landmarks/"+DATASET_NAME+"_cam"+str(VIDEO1_NUM).zfill(2)+str(VIDEO2_NUM).zfill(2)+"/"
 
 # 設定パラメータ
 START_FRAME = 137
@@ -61,8 +61,8 @@ video_caps = {
 }
 
 #jsonファイル保存フォルダ作成
-if not os.path.isdir(f"./outputs/best_landmarks"): # 指定したフォルダがなければ作成
-    os.makedirs(f"./outputs/best_landmarks")
+if not os.path.isdir(f"./data/outputs/best_landmarks"): # 指定したフォルダがなければ作成
+    os.makedirs(f"./data/outputs/best_landmarks")
 
 # 出力データ
 result = {}
@@ -108,7 +108,7 @@ for frame_id in range(START_FRAME, END_FRAME + 1, FRAME_INTERVAL):
     result[frame_id] = best
 
 # JSONファイルとして保存
-with open(f"./outputs/best_landmarks/best_landmarks_{str(frame_id).zfill(4)}.json", "w") as f:
+with open(f"./data/outputs/best_landmarks/best_landmarks_{str(frame_id).zfill(4)}.json", "w") as f:
     json.dump(result, f, indent=2)
 
 pose.close()

@@ -4,7 +4,7 @@ import glob
 import pandas as pd
 
 # file path 
-file_path = '/Users/tokudataichi/Documents/python_mediapipe/calibration_images/*.JPG'
+file_path = './data/calibration_images/*.JPG'
 
 # termination criteria
 criteria = (cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_MAX_ITER, 30, 0.001)

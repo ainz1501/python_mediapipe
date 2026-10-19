@@ -23,11 +23,11 @@ DEFAULT_VIDEO1_NUM = 18
 DEFAULT_VIDEO2_NUM = 23
 DEFAULT_END_FRAME_NUM = 9056
 # 一時的に画像を保存するフォルダのパス
-DEFAULT_TEMPORARY_IMAGES_STORAGE_PATH = "./output_images/images_temporary_storage/"
+DEFAULT_TEMPORARY_IMAGES_STORAGE_PATH = "./data/output_images/images_temporary_storage/"
 DEFAULT_PANOPTIC_ROOT = "./panoptic-toolbox"
-DEFAULT_INPUTS_ROOT = "./sys_inputs/input_images"
-DEFAULT_VIDEOS_ROOT = "./sys_outputs/output_videos"
-DEFAULT_LANDMARKS_ROOT = "./sys_outputs/output_landmarks"
+DEFAULT_INPUTS_ROOT = "./data/sys_inputs/input_images"
+DEFAULT_VIDEOS_ROOT = "./data/sys_outputs/output_videos"
+DEFAULT_LANDMARKS_ROOT = "./data/sys_outputs/output_landmarks"
 TEMPORARY_IMAGES_STORAGE_PATH = DEFAULT_TEMPORARY_IMAGES_STORAGE_PATH
 
 # ボーン情報

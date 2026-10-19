@@ -37,7 +37,7 @@ R_right, T_right = np.array(param2["R"]), np.array(param2["t"])
 
 # レンダリング用入力
 # 一時的に画像を保存するフォルダパス
-TEMPORARY_IMAGES_STORAGE_PATH = "./output_images/images_temporary_storage/"
+TEMPORARY_IMAGES_STORAGE_PATH = "./data/output_images/images_temporary_storage/"
 VIDEO_STORAGE_PATH = "./output_videos/"+DATASET_NAME+"_hdvideo_00&25/"
 # ボーン情報
 POSE_CONNECTIONS = mp_pose.POSE_CONNECTIONS
