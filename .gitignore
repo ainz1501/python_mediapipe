@@ -2,6 +2,7 @@
 calibration_images/
 related_files/
 tmp_images/
+test_inputs/
 inputs/ 
 outputs/
 test.py 
@@ -12,3 +13,5 @@ output_images/
 __pycache__/
 openpose/
 panoptic-toolbox/
+AGENTS.md
+FuncSpecs/

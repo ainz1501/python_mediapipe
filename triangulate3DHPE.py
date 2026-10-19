@@ -884,4 +884,3 @@ if __name__ == "__main__": # テスト用
             print(f"{results[i]["right_hand_mpjpe"]:.2f}")
         else:
             print(results[i]['status'])
-
