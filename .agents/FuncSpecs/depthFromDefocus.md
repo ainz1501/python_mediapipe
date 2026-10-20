@@ -95,6 +95,9 @@ depthMap, AIFImage = alternatingMinimization(initialAIFImage, focalStack)
 ## 前提条件・例外
 - 焦点スタックに含まれる各画像、AIF画像は全て同じサイズ、同チャネル数
 - 各画素の値は0~255までのいずれかの非負値である
+- 焦点距離、各画像の合焦距離、レンズ開口径、ピクセルサイズは0より大きい
+- 焦点スタックの画像枚数と合焦距離の要素数は一致する
+- 数値条件に違反した`FocalStack`が入力された場合は`ValueError`を送出する
 
 ## テスト方法
 
@@ -105,9 +108,9 @@ depthMap, AIFImage = alternatingMinimization(initialAIFImage, focalStack)
 
 ### 統合テスト
 
-- `initAIFImage`と`alternatingMinimization`をモックへ置き換える。
-- `initAIFImage`、`alternatingMinimization`の順に1回ずつ呼び出されることを確認する。
-- `initAIFImage`の戻り値が`alternatingMinimization`へ渡されることを確認する。
+- テスト用のモック関数への置き換えは行わない。
+- 数値条件を満たす既知の`FocalStack`を`depthFromDefocus`へ入力する。
+- 実際の`depthFromDefocus`が返した深度マップとAIF画像を期待出力と直接比較する。
 - 最終戻り値が深度マップ、AIF画像の順であることを確認する。
 
 ### テストデータ
@@ -124,8 +127,20 @@ depthMap, AIFImage = alternatingMinimization(initialAIFImage, focalStack)
 
 ### 型エラーテスト
 
-- `FocalStack`以外の型を入力した場合に`TypeError`が発生することを確認する。
-- 不正な型は1種類ずつ独立したテストケースとして実行する。
+- `null`に相当する`None`を入力した場合に`TypeError`が発生することを確認する。
+- `FocalStack`以外の不適切な型を1種類入力し、`TypeError`が発生することを確認する。
+
+### 数値条件エラーテスト
+
+- 各ケースでは、対象の値だけを変更した`FocalStack`を`depthFromDefocus`へ直接入力する。
+- テスト中に`initAIFImage`または`alternatingMinimization`をモックへ置き換えない。
+- 画素値が0未満の場合に`ValueError`が発生することを確認する。
+- 画素値が255を超える場合に`ValueError`が発生することを確認する。
+- 焦点距離が0以下の場合に`ValueError`が発生することを確認する。
+- 合焦距離に0以下の値が含まれる場合に`ValueError`が発生することを確認する。
+- レンズ開口径が0以下の場合に`ValueError`が発生することを確認する。
+- ピクセルサイズが0以下の場合に`ValueError`が発生することを確認する。
+- 焦点スタックの画像枚数と合焦距離の要素数が一致しない場合に`ValueError`が発生することを確認する。
 
 ### テスト結果の表示
 
@@ -133,9 +148,15 @@ depthMap, AIFImage = alternatingMinimization(initialAIFImage, focalStack)
 - 各ケースについて、概要、入力、真値またはゴール条件、実際の出力、結果をターミナルへ表示する。
 - 合格は`合格`、不合格は`不合格`と日本語で表示する。
 - テスト名、概要、入力、ゴール条件、実際の出力、最終集計も日本語で表示する。
+- テストは`個別テスト`、`統合テスト`、`異常系テスト`に分類し、種類ごとに1から採番する。
+- テスト名は`[個別テスト 1]`のように、テスト種類とその種類内の番号を表示する。
+- 個別テストには対象となる関数名を表示する。
+- 各テストには、対象関数を呼び出す実行コードを表示する。
+- 期待条件とは別に、実際の出力と同じデータ形式で期待出力を表示する。
+- 期待出力と実際の出力を比較し、`一致`または`不一致`を表示する。
 - 各テストコードの直前に、テスト番号と名称を示す日本語コメントを記述する。
 - 各テスト内の入力準備、関数実行、モックの置換と復元、期待結果との比較、不変条件確認について、日本語コメントで処理の意図を説明する。
-- 全ケース合格時は、合格数と総テスト数を最後に表示する。
+- 全ケース合格時は、種類別の合格数と全体の合格数を最後に表示する。
 - 不合格時はそのケースで停止し、後続テストを実行しない。
 
 

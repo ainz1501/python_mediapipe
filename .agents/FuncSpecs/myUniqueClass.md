@@ -50,8 +50,12 @@ from depthFromDefocus import Focal
 
 ## 初期化処理
 1. 引数の型がプロパティと正しいかを検証する（ただし、shapeに含まれるアルファベットは考慮しない）
-2. `allImg`は`makeAllImage`メソッドの戻り値を代入
-2. 対応するインスタンスプロパティに保存
+2. `img`の全画素値が0以上255以下であることを検証する
+3. `focalLength`、`focusDistance`の全要素、`apertureDiameter`、`pixelSize`が0より大きいことを検証する
+4. `img`の画像枚数と`focusDistance`の要素数が一致することを検証する
+5. 数値条件に違反した場合は`ValueError`を送出する
+6. `allImg`は`makeAllImage`メソッドの戻り値を代入
+7. 対応するインスタンスプロパティに保存
 
 ## makeAllImage メソッド 
 `self.img`内のK枚の(HW, C)の画像を一列に直す。
