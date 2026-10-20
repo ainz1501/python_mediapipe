@@ -4,17 +4,20 @@
 
 ### `src/modules/myCameraCalibration.py`
 
-- `myExtrinsicParameterCalibration`の動作確認で得られた回転行列と並進ベクトルを、テスト結果コメントとして追加
+- `myExtrinsicParameterCalibration`を実行し、問題なく動作することを確認
+- 今後のコード変更時に出力を比較できるよう、正常動作時の回転行列と並進ベクトルを実行結果コメントとして追加
 - 関数の処理内容、引数、戻り値に変更なし
 
 ### `src/other/calcurateCamPose.py`
 
-- カメラ間距離の計算値と回転行列の差分を、実行結果コメントとして追加
+- `calcurateCamPose.py`を実行し、問題なく動作することを確認
+- 今後のコード変更時に出力を比較できるよう、正常動作時のカメラ間距離の計算値と回転行列の差分を実行結果コメントとして追加
 - 計算処理と出力処理に変更なし
 
 ### 動作確認
 
-- このREADME更新時にはテストを実行していない
+- `src/modules/myCameraCalibration.py`を実行し、エラーなく期待した回転行列と並進ベクトルが出力されることを確認
+- `src/other/calcurateCamPose.py`を実行し、エラーなくカメラ間距離の計算値と回転行列の差分が出力されることを確認
 
 ## v5.0.0（2026-10-19）
 
