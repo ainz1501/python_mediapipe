@@ -13,12 +13,15 @@
 - 各テストについて、対象関数、概要、入力、実行コード、期待条件、期待出力、実際の出力、比較結果、合否を日本語で表示する処理を追加
 - 統合テストを、テスト用モックへの置き換えを行わず、実際の`depthFromDefocus`へ既知入力を渡して期待出力と比較する方式へ変更
 - 異常系テストを、`None`、不適切な型1種類、画素値、光学値、画像枚数の条件違反を個別に確認する構成へ変更
+- `initAIFImage`の仮置き処理を、焦点スタックの平均からshape `(4, 3)`の非空AIF画像を返す処理へ変更
+- `alternatingMinimization`の仮置き処理を、shape `(1, 4)`の非空深度マップとshape `(4, 3)`の非空AIF画像を返す処理へ変更
 - `initAIFImage`と`alternatingMinimization`の最適化処理は仮置きのため未完成
 
 ### 動作確認
 
 - `src/modules/depthFromDefocus.py`の構文チェックに合格
-- 利用可能なPython環境にNumPyが導入されていないため、モジュールの実行と全テストケースの確認は未完了
+- `.venv/bin/python`による`src.modules.depthFromDefocus`のimportチェックに合格
+- `src/modules/depthFromDefocus.py`の個別テスト2件、統合テスト1件、異常系テスト9件の全12件に合格
 
 ## v5.0.1（2026-10-20）
 

@@ -75,17 +75,17 @@ class FocalStack:
 
 
 def initAIFImage(focalStack: FocalStack) -> np.ndarray:
-    """Return a minimal placeholder initial AIF image."""
-    return np.empty((0, 0), dtype=float)
+    """Return a placeholder AIF image averaged across the focal stack."""
+    return np.mean(focalStack.img, axis=0)
 
 
 def alternatingMinimization(
     initialAIFImage: np.ndarray,
     focalStack: FocalStack,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Return minimal placeholder depth and AIF arrays."""
-    depthMap = np.empty((0, 0), dtype=float)
-    AIFImage = np.empty((0, 0), dtype=float)
+    """Return non-empty placeholder depth and AIF arrays."""
+    depthMap = np.zeros((1, initialAIFImage.shape[0]), dtype=float)
+    AIFImage = initialAIFImage.copy()
     return depthMap, AIFImage
 
 
@@ -152,8 +152,18 @@ if __name__ == "__main__":
     validFocalStack = FocalStack(
         img=np.array(
             [
-                [[10.0, 20.0, 30.0], [40.0, 50.0, 60.0]],
-                [[70.0, 80.0, 90.0], [100.0, 110.0, 120.0]],
+                [
+                    [10.0, 20.0, 30.0],
+                    [40.0, 50.0, 60.0],
+                    [70.0, 80.0, 90.0],
+                    [100.0, 110.0, 120.0],
+                ],
+                [
+                    [20.0, 30.0, 40.0],
+                    [50.0, 60.0, 70.0],
+                    [80.0, 90.0, 100.0],
+                    [110.0, 120.0, 130.0],
+                ],
             ]
         ),
         focalLength=0.05,
@@ -173,6 +183,7 @@ if __name__ == "__main__":
         output = initAIFImage(validFocalStack)
         require(isinstance(output, np.ndarray), "出力はnp.ndarrayである必要があります")
         require(output.ndim == 2, "出力は2次元である必要があります")
+        require(output.size > 0, "出力は空でない必要があります")
         # ターミナル表示用に、実際の型とshapeを返す。
         return {"型": type(output).__name__, "shape": output.shape}
 
@@ -186,14 +197,21 @@ if __name__ == "__main__":
         "FocalStackのインスタンス",
         "output = initAIFImage(validFocalStack)",
         "2次元のnp.ndarrayを返す",
-        {"型": "ndarray", "shape": (0, 0)},
+        {"型": "ndarray", "shape": (4, 3)},
         testInitAIFImage,
     )
 
     # 個別テスト2: alternatingMinimizationの出力契約
     def testAlternatingMinimization():
         # 初期AIF画像として、仕様上必要な最小の2次元配列を用意する。
-        initialAIFImage = np.empty((0, 0), dtype=float)
+        initialAIFImage = np.array(
+            [
+                [15.0, 25.0, 35.0],
+                [45.0, 55.0, 65.0],
+                [75.0, 85.0, 95.0],
+                [105.0, 115.0, 125.0],
+            ]
+        )
         # 仮置き関数を実行し、深度マップとAIF画像の2つの戻り値を取得する。
         depthMap, AIFImage = alternatingMinimization(
             initialAIFImage,
@@ -202,9 +220,11 @@ if __name__ == "__main__":
         # 深度マップは各画素位置を保持する2次元配列であることを確認する。
         require(isinstance(depthMap, np.ndarray), "depthMapはnp.ndarrayである必要があります")
         require(depthMap.ndim == 2, "depthMapは2次元である必要があります")
+        require(depthMap.size > 0, "depthMapは空でない必要があります")
         # AIF画像も画像データを保持する2次元配列であることを確認する。
         require(isinstance(AIFImage, np.ndarray), "AIFImageはnp.ndarrayである必要があります")
         require(AIFImage.ndim == 2, "AIFImageは2次元である必要があります")
+        require(AIFImage.size > 0, "AIFImageは空でない必要があります")
         return {
             "depthMap": {"型": type(depthMap).__name__, "shape": depthMap.shape},
             "AIFImage": {"型": type(AIFImage).__name__, "shape": AIFImage.shape},
@@ -217,12 +237,12 @@ if __name__ == "__main__":
         "alternatingMinimization",
         "alternatingMinimizationの出力契約",
         "仮置き関数の戻り値数、型、次元を確認します。",
-        "initialAIFImageのshape=(0, 0)、FocalStackのインスタンス",
+        "initialAIFImageのshape=(4, 3)、FocalStackのインスタンス",
         "depthMap, AIFImage = alternatingMinimization(initialAIFImage, validFocalStack)",
         "2次元のnp.ndarrayを2つ返す",
         {
-            "depthMap": {"型": "ndarray", "shape": (0, 0)},
-            "AIFImage": {"型": "ndarray", "shape": (0, 0)},
+            "depthMap": {"型": "ndarray", "shape": (1, 4)},
+            "AIFImage": {"型": "ndarray", "shape": (4, 3)},
         },
         testAlternatingMinimization,
     )
@@ -231,15 +251,24 @@ if __name__ == "__main__":
     def testIntegratedFlow():
         # 実際の関数へ既知のFocalStackを入力し、戻り値を直接取得する。
         actualDepthMap, actualAIFImage = depthFromDefocus(validFocalStack)
-        # 現在の仮置き実装が返す空の2次元配列と一致することを確認する。
-        expectedDepthMap = np.empty((0, 0), dtype=float)
-        expectedAIFImage = np.empty((0, 0), dtype=float)
+        # 現在の仮置き実装が返す空でない2次元配列と一致することを確認する。
+        expectedDepthMap = np.zeros((1, 4), dtype=float)
+        expectedAIFImage = np.array(
+            [
+                [15.0, 25.0, 35.0],
+                [45.0, 55.0, 65.0],
+                [75.0, 85.0, 95.0],
+                [105.0, 115.0, 125.0],
+            ]
+        )
         np.testing.assert_array_equal(actualDepthMap, expectedDepthMap)
         np.testing.assert_array_equal(actualAIFImage, expectedAIFImage)
         # 実際の戻り値が深度と画像値の不変条件を満たすことを確認する。
         require(np.all(actualDepthMap >= 0.0), "depthMapに負の値が含まれています")
         require(np.all(actualAIFImage >= 0.0), "AIFImageに負の値が含まれています")
         require(np.all(actualAIFImage <= 255.0), "AIFImageに255を超える値が含まれています")
+        require(actualDepthMap.size > 0, "depthMapは空でない必要があります")
+        require(actualAIFImage.size > 0, "AIFImageは空でない必要があります")
         return {
             "depthMapの型": type(actualDepthMap).__name__,
             "depthMapのshape": actualDepthMap.shape,
@@ -258,14 +287,19 @@ if __name__ == "__main__":
         "実際の関数へ既知入力を渡し、戻り値と不変条件を確認します。",
         "数値条件を満たすFocalStackのインスタンス",
         "actualDepthMap, actualAIFImage = depthFromDefocus(validFocalStack)",
-        "空の2次元配列を2つ返し、深度>=0、0<=画像値<=255",
+        "空でない2次元配列を2つ返し、深度>=0、0<=画像値<=255",
         {
             "depthMapの型": "ndarray",
-            "depthMapのshape": (0, 0),
-            "depthMap": [],
+            "depthMapのshape": (1, 4),
+            "depthMap": [[0.0, 0.0, 0.0, 0.0]],
             "AIFImageの型": "ndarray",
-            "AIFImageのshape": (0, 0),
-            "AIFImage": [],
+            "AIFImageのshape": (4, 3),
+            "AIFImage": [
+                [15.0, 25.0, 35.0],
+                [45.0, 55.0, 65.0],
+                [75.0, 85.0, 95.0],
+                [105.0, 115.0, 125.0],
+            ],
         },
         testIntegratedFlow,
     )

@@ -105,6 +105,7 @@ depthMap, AIFImage = alternatingMinimization(initialAIFImage, focalStack)
 
 - `initAIFImage`の仮置きが2次元の`np.ndarray`を返すことを確認する。
 - `alternatingMinimization`の仮置きが、2次元の深度マップと2次元のAIF画像を`np.ndarray`として返すことを確認する。
+- 各関数が返す配列が空でないことを確認する。
 
 ### 統合テスト
 
@@ -112,12 +113,24 @@ depthMap, AIFImage = alternatingMinimization(initialAIFImage, focalStack)
 - 数値条件を満たす既知の`FocalStack`を`depthFromDefocus`へ入力する。
 - 実際の`depthFromDefocus`が返した深度マップとAIF画像を期待出力と直接比較する。
 - 最終戻り値が深度マップ、AIF画像の順であることを確認する。
+- 入力および期待出力には空配列を使用しない。
 
 ### テストデータ
 
 - 初期AIF画像とAIF画像にはshapeが`(4, 3)`の行列を使用する。
-- 深度マップにはshapeが`(2, 2)`の行列を使用する。
+- 深度マップにはshapeが`(1, 4)`の行列を使用する。
 - 行列の行数・列数はともに4以下とする。
+
+### 処理フロー目視チェックリスト
+
+型、shape、値域、要素数および具体的な出力値は自動テストで検証し、このチェックリストには含めない。
+
+- [ ] `initAIFImage(focalStack)`の呼び出しが処理フローから欠けていない。
+- [ ] `initAIFImage`の戻り値を`initialAIFImage`として受け取っている。
+- [ ] `initAIFImage`の完了後に`alternatingMinimization(initialAIFImage, focalStack)`を呼び出している。
+- [ ] `alternatingMinimization`の戻り値を`depthMap`、`AIFImage`の順に受け取っている。
+- [ ] 最後に`depthMap`、`AIFImage`の順で返している。
+- [ ] 仕様書の処理フローに記載された処理が、途中で省略または別の処理に置き換えられていない。
 
 ### 不変条件
 
@@ -155,7 +168,7 @@ depthMap, AIFImage = alternatingMinimization(initialAIFImage, focalStack)
 - 期待条件とは別に、実際の出力と同じデータ形式で期待出力を表示する。
 - 期待出力と実際の出力を比較し、`一致`または`不一致`を表示する。
 - 各テストコードの直前に、テスト番号と名称を示す日本語コメントを記述する。
-- 各テスト内の入力準備、関数実行、モックの置換と復元、期待結果との比較、不変条件確認について、日本語コメントで処理の意図を説明する。
+- 各テスト内の入力準備、関数実行、期待結果との比較、不変条件確認について、日本語コメントで処理の意図を説明する。
 - 全ケース合格時は、種類別の合格数と全体の合格数を最後に表示する。
 - 不合格時はそのケースで停止し、後続テストを実行しない。
 
