@@ -80,6 +80,12 @@ from depthFromDefocus import FocalStack
 
 ## テスト方法
 
+### 実行対象の切り替え
+
+- `depthFromDefocus.py`の`TEST_TARGET`へ`"FocalStack"`を設定する。
+- FocalStackのテストだけを実行・表示し、Depth from Defocusのテストは実行・表示しない。
+- 集計にはFocalStackのテスト件数だけを含める。
+
 ### 個別テスト
 
 - `makeAllImage`へ2枚の既知画像を持つ`FocalStack`を入力する。

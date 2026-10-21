@@ -116,6 +116,11 @@ def depthFromDefocus(
 
 
 if __name__ == "__main__":
+    TEST_TARGET = "FocalStack"
+    TEST_TARGETS = {"FocalStack", "Depth from Defocus"}
+    if TEST_TARGET not in TEST_TARGETS:
+        raise ValueError(f"TEST_TARGET must be one of {sorted(TEST_TARGETS)}")
+
     # 条件が偽の場合にテストを不合格として停止する共通確認関数。
     def require(condition, message):
         if not condition:
@@ -134,7 +139,17 @@ if __name__ == "__main__":
         expectedOutput,
         testFunction,
     ):
-        print(f"\n[{category} {number}] {name}")
+        testTarget = (
+            "FocalStack"
+            if targetFunction.startswith("FocalStack")
+            else "Depth from Defocus"
+        )
+        if testTarget != TEST_TARGET:
+            return
+
+        executedTestCounts[category] += 1
+        displayedNumber = executedTestCounts[category]
+        print(f"\n[{category} {displayedNumber}] {name}")
         print(f"対象関数 : {targetFunction}")
         print(f"概要     : {overview}")
         print(f"入力     : {testInput}")
@@ -183,6 +198,14 @@ if __name__ == "__main__":
         "統合テスト": 0,
         "異常系テスト": 0,
     }
+    executedTestCounts = {
+        "個別テスト": 0,
+        "統合テスト": 0,
+        "異常系テスト": 0,
+    }
+    print("=" * 40)
+    print(f"{TEST_TARGET} テスト")
+    print("=" * 40)
 
     # 個別テスト1: FocalStack.makeAllImageの既知入出力
     def testMakeAllImage():
@@ -643,8 +666,8 @@ if __name__ == "__main__":
             testInvalidNumericValue,
         )
 
-    print("\n種類別集計")
-    for category, count in testCounts.items():
+    print(f"\n{TEST_TARGET} 集計")
+    for category, count in executedTestCounts.items():
         print(f"{category}: {count}/{count}件合格")
-    totalTestCount = sum(testCounts.values())
+    totalTestCount = sum(executedTestCounts.values())
     print(f"全テスト合格: {totalTestCount}/{totalTestCount}")

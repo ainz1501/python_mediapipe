@@ -1,5 +1,21 @@
 # 更新履歴
 
+## v5.2.1（2026-10-21）
+
+### `src/modules/depthFromDefocus.py`
+
+- `TEST_TARGET`の値によって、同一ファイル内のFocalStackテストとDepth from Defocusテストの実行・表示対象を切り替える処理を追加
+- `TEST_TARGET = "FocalStack"`を設定し、FocalStackに関するテストだけを実行・表示する構成へ変更
+- テスト番号と種類別集計を、選択した対象の実行件数だけで採番・集計するよう変更
+- Depth from Defocusのテストコードは同一ファイル内に保持し、対象外の場合は実行しない
+
+### 動作確認
+
+- `.venv/bin/python`で`src/modules/depthFromDefocus.py`の構文チェックに合格
+- `FocalStack`のimportチェックに合格
+- FocalStackの個別テスト1件、統合テスト1件、異常系テスト9件の全11件に合格
+- ターミナルにFocalStackのテストと集計だけが表示されることを確認
+
 ## v5.2.0（2026-10-21）
 
 ### `src/modules/depthFromDefocus.py`

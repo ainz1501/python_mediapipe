@@ -157,6 +157,7 @@ depthMap, AIFImage = alternatingMinimization(initialAIFImage, focalStack)
 
 ### テスト結果の表示
 
+- `depthFromDefocus.py`の`TEST_TARGET`へ`"Depth from Defocus"`を設定した場合だけ、本関数と使用関数のテストを実行・表示する。
 - `depthFromDefocus.py`を1回実行して、全テストケースを順番に実行する。
 - 各ケースについて、概要、入力、真値またはゴール条件、実際の出力、結果をターミナルへ表示する。
 - 合格は`合格`、不合格は`不合格`と日本語で表示する。
