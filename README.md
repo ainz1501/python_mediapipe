@@ -4,24 +4,31 @@
 
 ### `src/modules/depthFromDefocus.py`
 
-- `FocalStack`の初期化処理を実装し、画像、焦点距離、合焦距離、レンズ開口径、ピクセルサイズをプロパティとして保持する処理を追加
-- `FocalStack.makeAllImage`を実装し、焦点スタック内の画像を結合した`allImg`を生成する処理を追加
-- 画素値が0以上255以下であることと、各光学値が0より大きいことを検証する処理を追加
-- 焦点スタックの画像枚数と合焦距離の要素数が一致することを検証する処理を追加
-- `depthFromDefocus`へ、入力された`FocalStack`の数値条件を検証し、違反時に`ValueError`を送出する処理を追加
-- テストを`個別テスト`、`統合テスト`、`異常系テスト`へ分類し、分類ごとに採番する形式へ変更
-- 各テストについて、対象関数、概要、入力、実行コード、期待条件、期待出力、実際の出力、比較結果、合否を日本語で表示する処理を追加
-- 統合テストを、テスト用モックへの置き換えを行わず、実際の`depthFromDefocus`へ既知入力を渡して期待出力と比較する方式へ変更
-- 異常系テストを、`None`、不適切な型1種類、画素値、光学値、画像枚数の条件違反を個別に確認する構成へ変更
-- `initAIFImage`の仮置き処理を、焦点スタックの平均からshape `(4, 3)`の非空AIF画像を返す処理へ変更
-- `alternatingMinimization`の仮置き処理を、shape `(1, 4)`の非空深度マップとshape `(4, 3)`の非空AIF画像を返す処理へ変更
-- `initAIFImage`と`alternatingMinimization`の最適化処理は仮置きのため未完成
+#### 実装
+
+- `FocalStack`の初期化処理を実装し、画像、焦点距離、合焦距離、レンズ開口径、ピクセルサイズをプロパティとして保持
+- `FocalStack.makeAllImage`を実装し、焦点スタック内の画像を結合した`allImg`を生成
+- 画素値が0以上255以下、各光学値が0より大きいこと、および画像枚数と合焦距離数が一致することを検証
+- `depthFromDefocus`でも入力された`FocalStack`の数値条件を検証し、違反時に`ValueError`を送出
+- `initAIFImage`の仮置き処理を、焦点スタックの平均から非空のAIF画像を返す処理へ変更
+- `alternatingMinimization`の仮置き処理を、非空の深度マップとAIF画像を返す処理へ変更
+- `initAIFImage`と`alternatingMinimization`の最適化アルゴリズムは未完成
+
+#### テストコード
+
+- テストを`個別テスト`、`統合テスト`、`異常系テスト`に分類し、分類ごとに採番
+- 各テストの対象関数、概要、入力、実行コード、期待条件、期待出力、実際の出力、比較結果、合否を日本語で表示
+- テスト用モックへ置き換えず、実際の関数へ既知入力を直接渡して期待出力と比較する方式へ変更
+- 個別テストで`initAIFImage`と`alternatingMinimization`が空でない2次元配列を返すことを確認
+- 統合テストで、shape `(1, 4)`の深度マップとshape `(4, 3)`のAIF画像について、型、shape、既知出力、不変条件を確認
+- 異常系テストで、`None`、不適切な型1種類、画素値範囲、各光学値、画像枚数と合焦距離数の不一致を個別に確認
 
 ### 動作確認
 
-- `src/modules/depthFromDefocus.py`の構文チェックに合格
-- `.venv/bin/python`による`src.modules.depthFromDefocus`のimportチェックに合格
-- `src/modules/depthFromDefocus.py`の個別テスト2件、統合テスト1件、異常系テスト9件の全12件に合格
+- `.venv/bin/python`（Python 3.12.3、NumPy 1.26.4）で構文チェックと`src.modules.depthFromDefocus`のimportチェックに合格
+- 個別テスト2件、統合テスト1件、異常系テスト9件の全12件に合格
+- `depthFromDefocus`が`initAIFImage`、`alternatingMinimization`を順に呼び出し、深度マップとAIF画像を返す処理フローを目視確認
+- テストコードの入力、期待条件、期待出力、実際の出力および合否判定をユーザーが目視確認
 
 ## v5.0.1（2026-10-20）
 
