@@ -1,5 +1,28 @@
 # 更新履歴
 
+## v5.2.0（2026-10-21）
+
+### `src/modules/depthFromDefocus.py`
+
+- `FocalStack`へ、`img`と`focusDistance`の要素が浮動小数点型であることを検証する処理を追加
+- `FocalStack.makeAllImage`を、焦点スタック内の画像を先頭から順に結合してshape `(KHW, C)`の配列を返す処理へ変更
+- `FocalStack.makeAllImage`の既知入出力テストと、初期化時の全プロパティおよび`allImg`を確認する統合テストを追加
+- `FocalStack`の`None`、不適切な要素型、画素値範囲、光学値、画像枚数に対する異常系テスト9件を追加
+- 既存の`depthFromDefocus`テストと合わせ、個別テスト3件、統合テスト2件、異常系テスト18件を1回で実行する構成へ変更
+
+### `src/modules/myCameraCalibration.py`
+
+- 動作確認用の`FocalStack`を、画像と光学パラメータを指定して初期化するよう変更
+- `myExtrinsicParameterCalibration`の処理内容、引数、戻り値に変更なし
+
+### 動作確認
+
+- `.venv/bin/python`（Python 3.12.3、NumPy 1.26.4）で`depthFromDefocus.py`と`myCameraCalibration.py`の構文チェックに合格
+- `FocalStack`と`src.modules.myCameraCalibration`のimportチェックに合格
+- 個別テスト3件、統合テスト2件、異常系テスト18件の全23件に合格
+- `src/modules/myCameraCalibration.py`の直接実行に合格し、期待する回転行列と並進ベクトルの出力を確認
+- `FocalStack`の初期化と`makeAllImage`の処理フローについて、目視チェックリスト全5項目を確認
+
 ## v5.1.0（2026-10-20）
 
 ### `src/modules/depthFromDefocus.py`

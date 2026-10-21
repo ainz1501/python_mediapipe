@@ -93,7 +93,13 @@ if __name__ == "__main__":
         dtype=float,
     )
     # landmark2 = [[110.0, 100.0], [210.0, 110.0], [310.0, 130.0], [410.0, 150.0], [130.0, 260.0], [230.0, 280.0], [330.0, 300.0], [430.0, 320.0]]
-    focalStack = dfd.FocalStack()
+    focalStack = dfd.FocalStack(
+        img=np.zeros((2, 4, 3), dtype=float),
+        focalLength=0.05,
+        focusDistance=np.array([1.0, 2.0], dtype=float),
+        apertureDiameter=0.01,
+        pixelSize=0.00001,
+    )
     # focalStack = "test"
     intrinsicParameter = np.array(
         [

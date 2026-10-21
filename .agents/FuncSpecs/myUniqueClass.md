@@ -35,7 +35,7 @@
 - 配置ファイル: `depthFromDefocus.py`
 - インポート方法: 
 ```python
-from depthFromDefocus import Focal
+from depthFromDefocus import FocalStack
 ```
 
 ## プロパティ
@@ -50,6 +50,7 @@ from depthFromDefocus import Focal
 
 ## 初期化処理
 1. 引数の型がプロパティと正しいかを検証する（ただし、shapeに含まれるアルファベットは考慮しない）
+    - `img`と`focusDistance`の要素の型は浮動小数点型とする
 2. `img`の全画素値が0以上255以下であることを検証する
 3. `focalLength`、`focusDistance`の全要素、`apertureDiameter`、`pixelSize`が0より大きいことを検証する
 4. `img`の画像枚数と`focusDistance`の要素数が一致することを検証する
@@ -76,4 +77,34 @@ from depthFromDefocus import Focal
 2. 以下をK回ループ
 3. `self.img[i]`を取得する
 4. 列方向に`self.img[i]`を`J`に追加する
+
+## テスト方法
+
+### 個別テスト
+
+- `makeAllImage`へ2枚の既知画像を持つ`FocalStack`を入力する。
+- 画像が入力順に結合され、shape `(8, 3)`の既知出力と一致することを確認する。
+
+### 統合テスト
+
+- 既知の`img`、`focalLength`、`focusDistance`、`apertureDiameter`、`pixelSize`で`FocalStack`を初期化する。
+- 全入力が対応するプロパティへ保存され、`allImg`が既知出力と一致することを確認する。
+
+### 異常系テスト
+
+- `img`へ`None`を入力した場合に`TypeError`が発生することを確認する。
+- `img`の要素が整数型の場合に`TypeError`が発生することを確認する。
+- 画素値が0未満または255を超える場合に`ValueError`が発生することを確認する。
+- 焦点距離、合焦距離、レンズ開口径、ピクセルサイズが0以下の場合に、それぞれ`ValueError`が発生することを確認する。
+- 画像枚数と合焦距離数が一致しない場合に`ValueError`が発生することを確認する。
+
+### 処理フロー目視チェックリスト
+
+型、shape、値域、要素数および具体的な出力値は自動テストで検証し、このチェックリストには含めない。
+
+- [ ] 初期化時に`img`を保存してから`makeAllImage`を呼び出している。
+- [ ] `makeAllImage`の戻り値を`allImg`へ保存している。
+- [ ] `makeAllImage`が`self.img`を先頭から順番に処理している。
+- [ ] 各画像を処理するループに、画像の取得と結合処理が欠けなく含まれている。
+- [ ] 最後に結合済みの画像を返している。
 

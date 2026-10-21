@@ -55,6 +55,10 @@ class FocalStack:
             raise TypeError("apertureDiameter must be float")
         if not isinstance(pixelSize, float):
             raise TypeError("pixelSize must be float")
+        if not np.issubdtype(img.dtype, np.floating):
+            raise TypeError("img elements must be float")
+        if not np.issubdtype(focusDistance.dtype, np.floating):
+            raise TypeError("focusDistance elements must be float")
         _validateFocalStackValues(
             img,
             focalLength,
@@ -71,7 +75,10 @@ class FocalStack:
         self.allImg = self.makeAllImage()
 
     def makeAllImage(self) -> np.ndarray:
-        return np.concatenate(self.img, axis=0)
+        allImage = np.empty((0, self.img.shape[2]), dtype=self.img.dtype)
+        for image in self.img:
+            allImage = np.concatenate((allImage, image), axis=0)
+        return allImage
 
 
 def initAIFImage(focalStack: FocalStack) -> np.ndarray:
@@ -177,7 +184,223 @@ if __name__ == "__main__":
         "異常系テスト": 0,
     }
 
-    # 個別テスト1: initAIFImageの出力契約
+    # 個別テスト1: FocalStack.makeAllImageの既知入出力
+    def testMakeAllImage():
+        # 2枚の画像を保持する実際のFocalStackから、全画像を結合するメソッドを直接実行する。
+        actualAllImage = validFocalStack.makeAllImage()
+        expectedAllImage = np.array(
+            [
+                [10.0, 20.0, 30.0],
+                [40.0, 50.0, 60.0],
+                [70.0, 80.0, 90.0],
+                [100.0, 110.0, 120.0],
+                [20.0, 30.0, 40.0],
+                [50.0, 60.0, 70.0],
+                [80.0, 90.0, 100.0],
+                [110.0, 120.0, 130.0],
+            ]
+        )
+        # 画像が入力順に欠落なく結合され、期待するshapeと値になっていることを確認する。
+        np.testing.assert_array_equal(actualAllImage, expectedAllImage)
+        return {
+            "型": type(actualAllImage).__name__,
+            "shape": actualAllImage.shape,
+            "値": actualAllImage.tolist(),
+        }
+
+    testCounts["個別テスト"] += 1
+    runTestCase(
+        "個別テスト",
+        testCounts["個別テスト"],
+        "FocalStack.makeAllImage",
+        "焦点スタック画像の結合",
+        "2枚の画像が入力順に1つの行列へ結合されることを確認します。",
+        "imgのshape=(2, 4, 3)",
+        "actualAllImage = validFocalStack.makeAllImage()",
+        "shape (8, 3)のnp.ndarrayを既知の順序で返す",
+        {
+            "型": "ndarray",
+            "shape": (8, 3),
+            "値": [
+                [10.0, 20.0, 30.0],
+                [40.0, 50.0, 60.0],
+                [70.0, 80.0, 90.0],
+                [100.0, 110.0, 120.0],
+                [20.0, 30.0, 40.0],
+                [50.0, 60.0, 70.0],
+                [80.0, 90.0, 100.0],
+                [110.0, 120.0, 130.0],
+            ],
+        },
+        testMakeAllImage,
+    )
+
+    # 統合テスト1: FocalStack初期化と全プロパティの設定
+    def testFocalStackInitialization():
+        # 既知入力から実際のFocalStackを生成し、全プロパティを取得する。
+        focalStack = FocalStack(
+            img=validFocalStack.img.copy(),
+            focalLength=0.05,
+            focusDistance=np.array([1.0, 2.0], dtype=float),
+            apertureDiameter=0.01,
+            pixelSize=0.000005,
+        )
+        return {
+            "img": focalStack.img.tolist(),
+            "allImg": focalStack.allImg.tolist(),
+            "focalLength": focalStack.focalLength,
+            "focusDistance": focalStack.focusDistance.tolist(),
+            "apertureDiameter": focalStack.apertureDiameter,
+            "pixelSize": focalStack.pixelSize,
+        }
+
+    testCounts["統合テスト"] += 1
+    runTestCase(
+        "統合テスト",
+        testCounts["統合テスト"],
+        "FocalStack.__init__",
+        "FocalStackの初期化とプロパティ設定",
+        "既知入力が全プロパティへ保存され、allImgが生成されることを確認します。",
+        "img、focalLength、focusDistance、apertureDiameter、pixelSize",
+        "focalStack = FocalStack(...) then read all properties",
+        "入力値と各プロパティが一致し、allImgが入力順に結合される",
+        {
+            "img": validFocalStack.img.tolist(),
+            "allImg": validFocalStack.allImg.tolist(),
+            "focalLength": 0.05,
+            "focusDistance": [1.0, 2.0],
+            "apertureDiameter": 0.01,
+            "pixelSize": 0.000005,
+        },
+        testFocalStackInitialization,
+    )
+
+    # 異常系テスト1〜2: FocalStackのnullと不適切な要素型に対する型エラー
+    invalidFocalStackTypes = [
+        (
+            "imgがnull（None）",
+            {"img": None},
+            "TypeError: img must be np.ndarray",
+        ),
+        (
+            "imgの要素が不適切なint型",
+            {"img": np.zeros((2, 4, 3), dtype=int)},
+            "TypeError: img elements must be float",
+        ),
+    ]
+
+    for conditionName, replacements, expectedError in invalidFocalStackTypes:
+        # 正常な初期化引数のうち、型確認の対象だけを不正な値へ置き換える。
+        def testInvalidFocalStackType(
+            changes=replacements,
+            expected=expectedError,
+        ):
+            arguments = {
+                "img": validFocalStack.img.copy(),
+                "focalLength": 0.05,
+                "focusDistance": np.array([1.0, 2.0], dtype=float),
+                "apertureDiameter": 0.01,
+                "pixelSize": 0.000005,
+            }
+            arguments.update(changes)
+            try:
+                FocalStack(**arguments)
+            except TypeError as error:
+                actualError = f"TypeError: {error}"
+                require(actualError == expected, "TypeErrorの内容が期待値と異なります")
+                return actualError
+            raise AssertionError("TypeErrorが発生しませんでした")
+
+        testCounts["異常系テスト"] += 1
+        runTestCase(
+            "異常系テスト",
+            testCounts["異常系テスト"],
+            "FocalStack.__init__",
+            f"FocalStackが{conditionName}を拒否すること",
+            "クラス初期化時の型検証を確認します。",
+            pformat(replacements),
+            "FocalStack(**arguments)",
+            "TypeErrorが発生する",
+            expectedError,
+            testInvalidFocalStackType,
+        )
+
+    # 異常系テスト3〜9: FocalStack初期化時の数値条件に対する値エラー
+    invalidFocalStackValues = [
+        (
+            "画素値が0未満",
+            {"img": np.array([[[-1.0, 20.0, 30.0]], [[40.0, 50.0, 60.0]]])},
+            "ValueError: img values must be between 0 and 255",
+        ),
+        (
+            "画素値が255超過",
+            {"img": np.array([[[256.0, 20.0, 30.0]], [[40.0, 50.0, 60.0]]])},
+            "ValueError: img values must be between 0 and 255",
+        ),
+        (
+            "焦点距離が0以下",
+            {"focalLength": 0.0},
+            "ValueError: focalLength must be greater than 0",
+        ),
+        (
+            "合焦距離に0以下を含む",
+            {"focusDistance": np.array([1.0, 0.0])},
+            "ValueError: focusDistance values must be greater than 0",
+        ),
+        (
+            "レンズ開口径が0以下",
+            {"apertureDiameter": 0.0},
+            "ValueError: apertureDiameter must be greater than 0",
+        ),
+        (
+            "ピクセルサイズが0以下",
+            {"pixelSize": 0.0},
+            "ValueError: pixelSize must be greater than 0",
+        ),
+        (
+            "画像枚数と合焦距離数が不一致",
+            {"focusDistance": np.array([1.0])},
+            "ValueError: img count must match focusDistance count",
+        ),
+    ]
+
+    for conditionName, replacements, expectedError in invalidFocalStackValues:
+        # 各ケースで1つの数値条件だけを不正にし、初期化時のValueErrorを確認する。
+        def testInvalidFocalStackValue(
+            changes=replacements,
+            expected=expectedError,
+        ):
+            arguments = {
+                "img": validFocalStack.img.copy(),
+                "focalLength": 0.05,
+                "focusDistance": np.array([1.0, 2.0], dtype=float),
+                "apertureDiameter": 0.01,
+                "pixelSize": 0.000005,
+            }
+            arguments.update(changes)
+            try:
+                FocalStack(**arguments)
+            except ValueError as error:
+                actualError = f"ValueError: {error}"
+                require(actualError == expected, "ValueErrorの内容が期待値と異なります")
+                return actualError
+            raise AssertionError("ValueErrorが発生しませんでした")
+
+        testCounts["異常系テスト"] += 1
+        runTestCase(
+            "異常系テスト",
+            testCounts["異常系テスト"],
+            "FocalStack.__init__",
+            f"FocalStackが{conditionName}を拒否すること",
+            "クラス初期化時の数値条件を確認します。",
+            pformat(replacements),
+            "FocalStack(**arguments)",
+            "ValueErrorが発生する",
+            expectedError,
+            testInvalidFocalStackValue,
+        )
+
+    # 個別テスト2: initAIFImageの出力契約
     def testInitAIFImage():
         # 仮置き関数を実行し、仕様どおり画像を表す2次元配列が返ることを確認する。
         output = initAIFImage(validFocalStack)
@@ -201,7 +424,7 @@ if __name__ == "__main__":
         testInitAIFImage,
     )
 
-    # 個別テスト2: alternatingMinimizationの出力契約
+    # 個別テスト3: alternatingMinimizationの出力契約
     def testAlternatingMinimization():
         # 初期AIF画像として、仕様上必要な最小の2次元配列を用意する。
         initialAIFImage = np.array(
@@ -247,7 +470,7 @@ if __name__ == "__main__":
         testAlternatingMinimization,
     )
 
-    # 統合テスト1: depthFromDefocusの実関数による入出力
+    # 統合テスト2: depthFromDefocusの実関数による入出力
     def testIntegratedFlow():
         # 実際の関数へ既知のFocalStackを入力し、戻り値を直接取得する。
         actualDepthMap, actualAIFImage = depthFromDefocus(validFocalStack)
@@ -304,7 +527,7 @@ if __name__ == "__main__":
         testIntegratedFlow,
     )
 
-    # 異常系テスト1〜2: nullと不適切な型に対する型エラー
+    # 異常系テスト10〜11: nullと不適切な型に対する型エラー
     invalidFocalStacks = [
         ("null（None）入力", None, "None"),  # 異常系テスト1: null
         ("不適切なstr型入力", "focalStack", "'focalStack'"),  # 異常系テスト2: 不適切な型
@@ -336,7 +559,7 @@ if __name__ == "__main__":
             testInvalidType,
         )
 
-    # 異常系テスト3〜9: depthFromDefocusの数値条件に対する値エラー
+    # 異常系テスト12〜18: depthFromDefocusの数値条件に対する値エラー
     invalidNumericConditions = [
         (
             "画素値が0未満",
