@@ -193,6 +193,38 @@ if __name__ == "__main__":
         apertureDiameter=0.01,
         pixelSize=0.000005,
     )
+
+    # FocalStackへ実際に渡す全引数を生成し、各テストの入力と実行内容を一致させる。
+    def createFocalStackArguments(replacements=None):
+        arguments = {
+            "img": validFocalStack.img.copy(),
+            "focalLength": validFocalStack.focalLength,
+            "focusDistance": validFocalStack.focusDistance.copy(),
+            "apertureDiameter": validFocalStack.apertureDiameter,
+            "pixelSize": validFocalStack.pixelSize,
+        }
+        if replacements is not None:
+            arguments.update(replacements)
+        return arguments
+
+    # ndarrayは型、shape、要素型、全要素を示し、入力内容を省略せず表示する。
+    def formatInputValues(arguments):
+        formattedArguments = {}
+        for argumentName, value in arguments.items():
+            if isinstance(value, np.ndarray):
+                formattedArguments[argumentName] = {
+                    "型": "ndarray",
+                    "shape": value.shape,
+                    "要素の型": str(value.dtype),
+                    "値": value.tolist(),
+                }
+            else:
+                formattedArguments[argumentName] = {
+                    "型": type(value).__name__,
+                    "値": value,
+                }
+        return pformat(formattedArguments, sort_dicts=False)
+
     testCounts = {
         "個別テスト": 0,
         "統合テスト": 0,
@@ -238,7 +270,7 @@ if __name__ == "__main__":
         "FocalStack.makeAllImage",
         "焦点スタック画像の結合",
         "2枚の画像が入力順に1つの行列へ結合されることを確認します。",
-        "imgのshape=(2, 4, 3)",
+        formatInputValues({"img": validFocalStack.img}),
         "actualAllImage = validFocalStack.makeAllImage()",
         "shape (8, 3)のnp.ndarrayを既知の順序で返す",
         {
@@ -261,13 +293,7 @@ if __name__ == "__main__":
     # 統合テスト1: FocalStack初期化と全プロパティの設定
     def testFocalStackInitialization():
         # 既知入力から実際のFocalStackを生成し、全プロパティを取得する。
-        focalStack = FocalStack(
-            img=validFocalStack.img.copy(),
-            focalLength=0.05,
-            focusDistance=np.array([1.0, 2.0], dtype=float),
-            apertureDiameter=0.01,
-            pixelSize=0.000005,
-        )
+        focalStack = FocalStack(**createFocalStackArguments())
         return {
             "img": focalStack.img.tolist(),
             "allImg": focalStack.allImg.tolist(),
@@ -284,7 +310,7 @@ if __name__ == "__main__":
         "FocalStack.__init__",
         "FocalStackの初期化とプロパティ設定",
         "既知入力が全プロパティへ保存され、allImgが生成されることを確認します。",
-        "img、focalLength、focusDistance、apertureDiameter、pixelSize",
+        formatInputValues(createFocalStackArguments()),
         "focalStack = FocalStack(...) then read all properties",
         "入力値と各プロパティが一致し、allImgが入力順に結合される",
         {
@@ -318,14 +344,7 @@ if __name__ == "__main__":
             changes=replacements,
             expected=expectedError,
         ):
-            arguments = {
-                "img": validFocalStack.img.copy(),
-                "focalLength": 0.05,
-                "focusDistance": np.array([1.0, 2.0], dtype=float),
-                "apertureDiameter": 0.01,
-                "pixelSize": 0.000005,
-            }
-            arguments.update(changes)
+            arguments = createFocalStackArguments(changes)
             try:
                 FocalStack(**arguments)
             except TypeError as error:
@@ -341,7 +360,7 @@ if __name__ == "__main__":
             "FocalStack.__init__",
             f"FocalStackが{conditionName}を拒否すること",
             "クラス初期化時の型検証を確認します。",
-            pformat(replacements),
+            formatInputValues(createFocalStackArguments(replacements)),
             "FocalStack(**arguments)",
             "TypeErrorが発生する",
             expectedError,
@@ -393,14 +412,7 @@ if __name__ == "__main__":
             changes=replacements,
             expected=expectedError,
         ):
-            arguments = {
-                "img": validFocalStack.img.copy(),
-                "focalLength": 0.05,
-                "focusDistance": np.array([1.0, 2.0], dtype=float),
-                "apertureDiameter": 0.01,
-                "pixelSize": 0.000005,
-            }
-            arguments.update(changes)
+            arguments = createFocalStackArguments(changes)
             try:
                 FocalStack(**arguments)
             except ValueError as error:
@@ -416,7 +428,7 @@ if __name__ == "__main__":
             "FocalStack.__init__",
             f"FocalStackが{conditionName}を拒否すること",
             "クラス初期化時の数値条件を確認します。",
-            pformat(replacements),
+            formatInputValues(createFocalStackArguments(replacements)),
             "FocalStack(**arguments)",
             "ValueErrorが発生する",
             expectedError,
