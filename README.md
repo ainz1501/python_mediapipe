@@ -1,5 +1,20 @@
 # 更新履歴
 
+## v5.2.3（2026-10-22）
+
+### `src/modules/depthFromDefocus.py`
+
+- `FocalStack.makeAllImage`について、チャネル数を列数とする空配列の生成処理を説明する日本語コメントを追加
+- 焦点スタック内の各画像を縦方向へ結合する処理を説明する日本語コメントを追加
+- `FocalStack.makeAllImage`の処理内容、引数および戻り値に変更なし
+
+### 動作確認
+
+- `.venv/bin/python`で`src/modules/depthFromDefocus.py`の構文チェックに合格
+- `FocalStack`のimportチェックに合格
+- FocalStackの個別テスト1件、統合テスト1件、異常系テスト9件の全11件に合格
+- FocalStackのテストとコードを目視確認し、問題なく動作することを確認
+
 ## v5.2.2（2026-10-22）
 
 ### `src/modules/depthFromDefocus.py`

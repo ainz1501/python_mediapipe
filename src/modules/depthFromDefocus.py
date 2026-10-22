@@ -75,7 +75,9 @@ class FocalStack:
         self.allImg = self.makeAllImage()
 
     def makeAllImage(self) -> np.ndarray:
+        # チャネル数を列数とした2次元の0×C配列を作成
         allImage = np.empty((0, self.img.shape[2]), dtype=self.img.dtype)
+        # 各画像を縦方向に結合して、全画像を1つの行列にまとめる
         for image in self.img:
             allImage = np.concatenate((allImage, image), axis=0)
         return allImage
